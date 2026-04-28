@@ -110,10 +110,21 @@ Transform tasks into verifiable goals.
 Use these instructions for building the web application prototype. The code should be modular and object-oriented.
 
 #### Step 1 — Environment Setup
-Setup a basic static web project:
-- `index.html` (UI structure)
+Setup a modular web project using ES6 modules:
+- `index.html` (UI structure, includes `<script type="module" src="app.js"></script>`)
 - `style.css` (UI styling)
-- `app.js` (Main logic)
+- `/js`
+  - `config.js` (Centralized constants)
+  - `/core/engine.js` (Main requestAnimationFrame loop and app state)
+  - `/services/ml.js` (TensorFlow.js setup)
+  - `/services/camera.js` (Webcam handling)
+  - `/services/audio.js` (Web Audio API routing)
+  - `/services/recorder.js` (MediaRecorder logic)
+  - `/logic/tracker.js` (InstanceTracker)
+  - `/logic/filters.js` (OneEuroFilter)
+  - `/ui/dom.js` (DOM elements and event binding)
+  - `/ui/renderer.js` (Canvas drawing)
+- `app.js` (Entry point)
 
 Include TensorFlow.js and the MoveNet MultiPose model via CDN in the `<head>` of `index.html`:
 ```html
