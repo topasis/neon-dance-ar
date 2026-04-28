@@ -1,0 +1,95 @@
+body {
+    margin: 0;
+    padding: 0;
+    background-color: #111;
+    color: white;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+}
+
+#ui-container {
+    width: 100%;
+    max-width: 800px;
+    padding: 20px;
+    text-align: center;
+    box-sizing: border-box;
+}
+
+h1 {
+    margin-top: 0;
+    color: #0ff;
+    text-shadow: 0 0 10px #0ff;
+}
+
+.controls {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+button {
+    background: #333;
+    color: white;
+    border: 1px solid #555;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+button:hover:not(:disabled) {
+    background: #555;
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+button.active {
+    background: #0ff;
+    color: black;
+    border-color: #0ff;
+    box-shadow: 0 0 10px #0ff;
+}
+
+button.recording {
+    background: #f00;
+    color: white;
+    border-color: #f00;
+    box-shadow: 0 0 10px #f00;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 5px #f00; }
+    50% { box-shadow: 0 0 20px #f00; }
+    100% { box-shadow: 0 0 5px #f00; }
+}
+
+#status {
+    font-size: 12px;
+    color: #aaa;
+    min-height: 20px;
+}
+
+#video-container {
+    position: relative;
+    max-width: 100%;
+    display: flex;
+    justify-content: center;
+}
+
+canvas {
+    max-width: 100%;
+    background-color: black;
+    border: 1px solid #333;
+    border-radius: 8px;
+    box-shadow: 0 0 20px rgba(0,255,255,0.1);
+}

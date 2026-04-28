@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Dance AR</title>
+    <!-- TensorFlow.js dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="ui-container">
+        <h1>Neon Dance AR</h1>
+        <div class="controls">
+            <button id="btn-camera">Start Camera</button>
+            <button id="btn-background">Background: Live</button>
+            <button id="btn-music">Play Music</button>
+            <button id="btn-record" disabled>Start Recording</button>
+        </div>
+        <div id="status">Loading models...</div>
+    </div>
+    
+    <div id="video-container">
+        <video id="video" playsinline style="display: none;"></video>
+        <canvas id="output-canvas"></canvas>
+    </div>
+
+    <!-- Hidden audio element for music -->
+    <!-- You will need to put an actual music.mp3 file in the directory or update the src -->
+    <audio id="bg-music" src="assets/music.mp3" loop crossorigin="anonymous"></audio>
+
+    <script src="app.js"></script>
+</body>
+</html>
