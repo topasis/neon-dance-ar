@@ -17,7 +17,7 @@ Development is split into three phases:
 ## Core Features
 
 1. **Multi-Person Pose Estimation:** Tracks up to 5 people simultaneously with low-latency keypoint detection.
-2. **Neon Visualization:** Each detected person gets a unique neon color. Skeleton is rendered with additive blending and a bloom glow effect. User can select the color of the neon skeleton from a predefined list of colors. Each color has a unique texture that will be applied to the skeleton.
+2. **Neon Visualization:** Each detected person gets a unique neon color assigned automatically. Skeleton is rendered with additive blending and a bloom glow effect. (Manual color selection and unique textures are deferred to Phase 2/3).
 3. **Background Toggle:** A button switches between showing the live camera feed and a pure black background (skeleton-only mode).
 4. **Recording:** A start/stop button saves the composited output (including the current background mode) as an MP4 file.
 5. **Live Preview:** The composited frame is displayed in real time at 30 FPS minimum.
@@ -56,8 +56,8 @@ Development is split into three phases:
 ### Threading — Phase 1 (Python)
 
 Two threads:
-- **Capture thread:** Reads frames from OpenCV webcam, pushes to a shared queue.
-- **Inference + Render thread:** Pops the latest frame, runs MoveNet, draws skeleton, displays result, and pipes to recorder if active.
+- **Main (Capture & Render) thread:** Reads frames from OpenCV webcam. Uses the most recent pose estimations available to draw the skeleton, displays the result, and pipes to the recorder if active. Never blocks waiting for inference.
+- **Inference thread:** Asynchronously runs MoveNet on the latest captured frame and updates a thread-safe variable with the parsed and filtered keypoints.
 
 ### Threading — Phase 2 (Native Mobile)
 
@@ -147,7 +147,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ### Phase 1 — Python Prototype
 
-Use this instructions for building the python prototype. I will test the code on my macOS. It should use the default webcam of my mac. If the webcam is not found, it should show an error message and exit. The code should always be well-structured and modular. Use OOP. 
+Use this instructions for building the python prototype. I will test the code on my macOS. It should use the default webcam of my mac. If the webcam is not found or cannot be opened, it should show a helpful error message and exit. *Note for macOS:* Make sure the error message specifically mentions checking "macOS System Settings -> Privacy & Security -> Camera" to ensure the terminal/IDE has camera permissions, as missing permissions will cause `cv2.VideoCapture(0)` to fail silently or hang. The code should always be well-structured and modular. Use OOP. 
 
 ---
 
@@ -159,12 +159,16 @@ uv init
 uv add opencv-python tflite-runtime numpy
 ```
 
+*Note on cross-platform compatibility:* `tflite-runtime` might lack pre-built wheels on PyPI for certain architectures like macOS Apple Silicon (M1/M2/M3). If `uv add tflite-runtime` fails, fallback to installing the full TensorFlow package (`uv add tensorflow` or `uv add tensorflow-macos`) and update the import in the code from `tflite_runtime.interpreter` to `tensorflow.lite.Interpreter`.
+
 Add a makefile with commands for `install`, `run`, `lint`, and `format`.
 
 Download the model:
 ```
 MoveNet MultiPose Lightning:
-https://tfhub.dev/google/lite-model/movenet/multipose/lightning/tflite/float16/1
+Download from Kaggle Models (formerly TF Hub):
+https://www.kaggle.com/models/google/movenet/tfLite/multipose-lightning
+(Alternatively, if using curl/wget, ensure you follow HTTP redirects to get the actual .tflite binary).
 ```
 Save the model inside the `assets/models/` directory as `movenet_multipose_lightning.tflite` from the root directory of the project.
 
@@ -316,37 +320,49 @@ out = cv2.VideoWriter('output.mp4', fourcc, 30.0, (frame_width, frame_height))
 Initialize webcam (cv2.VideoCapture(0))
 Initialize TFLite interpreter with MoveNet MultiPose model
 Initialize VideoWriter as None
+Initialize shared thread-safe variable for latest parsed instances/keypoints
 
-Loop:
-    Read frame from webcam
-    If frame read fails: break
+Start Inference Thread:
+    Loop:
+        Grab latest frame
+        Preprocess frame for model (resize to 256×256, cast to int32)
+        Run inference
+        Parse output tensor (instances, keypoints, scores)
+        Filter instances by instance_score threshold (> 0.2)
+        Sort by instance_score descending, take top 5
+        Update shared thread-safe variable with filtered instances
 
-    Preprocess frame for model (resize to 256×256, cast to int32)
-    Run inference
-    Parse output tensor (instances, keypoints, scores)
-    Filter instances by instance_score threshold (> 0.2)
-    Sort by instance_score descending, take top 5
-    Match instances to previous frame IDs (nearest-neighbor on bbox center)
-    Apply One Euro Filter to matched keypoint positions
+Start Main Loop (Capture & Render Thread):
+    Loop:
+        Read frame from webcam
+        If frame read fails: break
+        
+        Copy latest available instances from shared variable
 
-    Build output canvas (camera frame or black based on toggle flag)
-    For each active instance:
-        Draw skeleton connections (skip if either endpoint confidence < 0.3)
-        Draw joint circles at visible keypoints
-    Apply glow effect (Gaussian blur + addWeighted)
+        Build output canvas (camera frame or black based on toggle flag)
+        
+        If instances are available:
+            Match instances to previous frame IDs (nearest-neighbor on bbox center)
+            Apply One Euro Filter to matched keypoint positions
+            
+            For each active instance:
+                Draw skeleton connections (skip if either endpoint confidence < 0.3)
+                Draw joint circles at visible keypoints
+            Apply glow effect (Gaussian blur + addWeighted)
 
-    Overlay UI labels (BG mode, REC indicator)
-    Display with cv2.imshow
+        Overlay UI labels (BG mode, REC indicator)
+        Display with cv2.imshow
 
-    If recording active: write composited frame to VideoWriter
+        If recording active: write composited frame to VideoWriter
 
-    Handle key presses:
-        B → toggle show_camera_feed flag
-        R → toggle recording (initialize or release VideoWriter)
-        Q or ESC → exit loop
+        Handle key presses:
+            B → toggle show_camera_feed flag
+            R → toggle recording (initialize or release VideoWriter)
+            Q or ESC → exit loop
 
 Release webcam
 If VideoWriter is open: release it
+Stop Inference Thread
 Destroy all OpenCV windows
 ```
 
