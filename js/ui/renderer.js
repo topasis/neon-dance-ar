@@ -23,7 +23,7 @@ export class Renderer {
     renderSkeletons(trackedInstances) {
         for (const inst of trackedInstances) {
             const color = CONFIG.NEON_COLORS[inst.colorIndex];
-            
+
             this.ctx.shadowBlur = CONFIG.RENDER.GLOW_BLUR;
             this.ctx.shadowColor = color;
             this.ctx.globalCompositeOperation = "lighter";
@@ -49,12 +49,34 @@ export class Renderer {
                     this.ctx.fill();
                 }
             }
+
+            this.renderCircleAroundFace(inst);
         }
 
         this.ctx.globalCompositeOperation = "source-over";
         this.ctx.shadowBlur = 0;
     }
-    
+
+    renderCircleAroundFace(inst) {
+        const nose = inst.keypoints[0];
+        const leftEye = inst.keypoints[1];
+        const rightEye = inst.keypoints[2];
+
+        if (nose && leftEye && rightEye &&
+            nose.score > CONFIG.TRACKING.MIN_CONFIDENCE &&
+            leftEye.score > CONFIG.TRACKING.MIN_CONFIDENCE &&
+            rightEye.score > CONFIG.TRACKING.MIN_CONFIDENCE) {
+
+            const dx = leftEye.x - rightEye.x;
+            const dy = leftEye.y - rightEye.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            this.ctx.beginPath();
+            this.ctx.arc(nose.x, nose.y, distance, 0, 2 * Math.PI);
+            this.ctx.stroke();
+        }
+    }
+
     clear() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     }
