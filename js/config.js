@@ -9,6 +9,10 @@ export const CONFIG = {
         LINE_WIDTH: 3,
         JOINT_RADIUS: 4
     },
+    MODEL: {
+        MAX_DIMENSION: 256,   // MoveNet multiPoseMaxDimension; must be a multiple of 32
+        BACKEND: 'webgl'      // 'webgl' (default) or 'webgpu' (opt-in, falls back to WebGL on failure)
+    },
     TRACKING: {
         MIN_CONFIDENCE: 0.3,
         MIN_INSTANCE_SCORE: 0.2,

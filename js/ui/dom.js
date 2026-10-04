@@ -8,10 +8,25 @@ export class DOMManager {
         this.video = document.getElementById('video');
         this.canvas = document.getElementById('output-canvas');
         this.audioEl = document.getElementById('bg-music');
+        this.statusMessage = this.statusText.innerText;
+        this.statsMessage = '';
     }
 
     setStatus(text) {
-        this.statusText.innerText = text;
+        this.statusMessage = text;
+        this.renderStatus();
+    }
+
+    // Loop rates shown after the status message; '' hides them.
+    setStats(text) {
+        this.statsMessage = text;
+        this.renderStatus();
+    }
+
+    renderStatus() {
+        this.statusText.innerText = this.statsMessage
+            ? `${this.statusMessage} | ${this.statsMessage}`
+            : this.statusMessage;
     }
 
     // Sets every button's label, active styling and enabled flag from the engine state.

@@ -54,7 +54,8 @@ Development is split into three phases:
 ### Threading & Concurrency
 
 - **Main Thread:** Handles UI, camera capture (`<video>` element), rendering to `<canvas>`, and recording via `MediaRecorder`.
-- **Inference:** TensorFlow.js WebGL backend handles the model asynchronously without blocking the main UI thread. A `requestAnimationFrame` loop retrieves the latest pose and draws it.
+- **Inference loop:** TensorFlow.js (WebGL by default, WebGPU opt-in via `CONFIG.MODEL.BACKEND` with fallback to WebGL) runs one `estimatePoses` at a time; when it resolves, the poses update the tracker (with the timestamp captured before the estimate started), the result is stored as the latest tracked instances, and the next estimate starts immediately. Inference is skipped while the video has no frame data.
+- **Render loop:** A `requestAnimationFrame` loop draws the background and the latest tracked instances every frame and never awaits inference, so preview and recording run at display rate even when inference is slower (see `docs/adr/0001-pose-model-and-inference-loop-on-mobile.md`).
 
 ### Music & Recording
 
@@ -145,8 +146,9 @@ Pass `modelUrl: 'models/movenet-multipose-lightning/model.json'` to `createDetec
 
 #### Step 3 — Run MoveNet MultiPose Inference
 - Initialize the pose detector: `poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, {modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING})`.
-- In a `requestAnimationFrame` loop, call `detector.estimatePoses(videoElement)`.
-- **Instance filtering:**
+- Pass `multiPoseMaxDimension: CONFIG.MODEL.MAX_DIMENSION` (multiple of 32, default 256) to bound the model input.
+- In a separate inference loop (not the `requestAnimationFrame` render loop), call `detector.estimatePoses(videoElement)` one estimate at a time, skipping it while `video.readyState < HAVE_CURRENT_DATA`. The render loop draws the latest result every frame.
+- **Instance filtering** (done inside `PoseDetector.estimatePoses()`):
   - Only process instances where the confidence score is `> 0.2`.
   - Sort detected instances by score descending; take the top 5.
 

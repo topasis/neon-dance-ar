@@ -26,8 +26,17 @@ export class AppEngine {
             showCameraFeed: true
         };
         this.animationId = null;
-        // Incremented whenever the render loop is started or stopped; a frame from an older generation is discarded.
+        // Incremented whenever the loops are started or stopped; work from an older generation is discarded.
         this.loopGeneration = 0;
+        // Latest tracked instances written by the inference loop and drawn by the render loop.
+        this.latestInstances = [];
+        // Settles when the in-flight estimate (if any) finishes, so a restarted inference loop never overlaps it.
+        this.estimateSettled = Promise.resolve();
+        this.loopStats = null;
+        // Last reported error per loop ('Render' / 'Inference'); cleared when that loop succeeds again.
+        this.loopErrors = {};
+        // Status message shown before a loop error replaced it, restored once all loops recover.
+        this.statusBeforeError = null;
 
         this.bindEvents();
         this.dom.render(this.state);
@@ -75,8 +84,7 @@ export class AppEngine {
 
             this.setState({ camera: 'on' });
             this.dom.setStatus("Running pose estimation...");
-            this.loopGeneration++;
-            this.renderLoop(this.loopGeneration);
+            this.startLoops();
         } catch (err) {
             console.error("Camera error:", err);
             this.camera.stop();
@@ -90,8 +98,7 @@ export class AppEngine {
         const wasRecording = this.state.recording;
         if (wasRecording) this.stopRecording();
 
-        this.loopGeneration++;
-        cancelAnimationFrame(this.animationId);
+        this.stopLoops();
         this.camera.stop();
         this.renderer.clear();
         this.setState({ camera: 'off' });
@@ -137,24 +144,160 @@ export class AppEngine {
         this.dom.setStatus("Recording stopped. Processing video...");
     }
 
-    async renderLoop(generation) {
+    startLoops() {
+        this.loopGeneration++;
+        this.latestInstances = [];
+        this.loopErrors = {};
+        this.statusBeforeError = null;
+        this.loopStats = { shownAt: performance.now(), render: newRate(), inference: newRate() };
+        this.renderLoop(this.loopGeneration);
+        this.inferenceLoop(this.loopGeneration);
+    }
+
+    stopLoops() {
+        this.loopGeneration++;
+        cancelAnimationFrame(this.animationId);
+        this.latestInstances = [];
+        this.dom.setStats('');
+    }
+
+    // Draws every animation frame with the latest tracked instances; never waits for inference.
+    renderLoop(generation) {
         if (generation !== this.loopGeneration) return;
 
-        let poses = await this.detector.estimatePoses(this.dom.video);
-        // The camera was stopped (or restarted) while inference was in flight: drop this frame.
-        if (generation !== this.loopGeneration) return;
-
-        poses = poses.filter(p => p.score > CONFIG.TRACKING.MIN_INSTANCE_SCORE);
-        poses.sort((a, b) => b.score - a.score);
-        if (poses.length > CONFIG.TRACKING.MAX_INSTANCES) {
-            poses = poses.slice(0, CONFIG.TRACKING.MAX_INSTANCES);
+        try {
+            this.renderer.renderBackground(this.dom.video, this.state.showCameraFeed);
+            this.renderer.renderSkeletons(this.latestInstances);
+            tickRate(this.loopStats.render);
+            this.clearLoopError('Render');
+            this.updateLoopStats();
+        } catch (err) {
+            this.reportLoopError('Render', err);
         }
-
-        const trackedInstances = this.tracker.update(poses);
-
-        this.renderer.renderBackground(this.dom.video, this.state.showCameraFeed);
-        this.renderer.renderSkeletons(trackedInstances);
 
         this.animationId = requestAnimationFrame(() => this.renderLoop(generation));
     }
+
+    // Runs one estimate at a time. Before the next one it waits for a camera frame newer than the one just
+    // estimated (so the same frame isn't estimated twice) and always yields a macrotask: on WebGL an estimate can
+    // resolve without ever yielding to the event loop, which would otherwise freeze the page.
+    async inferenceLoop(generation) {
+        await this.estimateSettled;
+        const video = this.dom.video;
+
+        while (generation === this.loopGeneration) {
+            if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+                await Promise.all([nextVideoFrame(video), yieldToEventLoop()]);
+                continue;
+            }
+
+            // Poses describe the frame at the time the estimate started, not when it resolves.
+            const t = performance.now();
+            // Armed before the estimate, so a frame that arrives while it runs counts as "new".
+            const newFrame = nextVideoFrame(video);
+            const estimate = this.detector.estimatePoses(video);
+            this.estimateSettled = estimate.then(() => {}, () => {});
+            try {
+                const poses = await estimate;
+                // The camera was stopped (or restarted) while inference was in flight: drop the result.
+                if (generation !== this.loopGeneration) return;
+                this.latestInstances = this.tracker.update(poses, t);
+                tickRate(this.loopStats.inference);
+                this.clearLoopError('Inference');
+            } catch (err) {
+                if (generation !== this.loopGeneration) return;
+                // Falls through to the frame wait below, so a persistent failure retries at most once per camera frame.
+                this.reportLoopError('Inference', err);
+            }
+            await Promise.all([newFrame, yieldToEventLoop()]);
+        }
+    }
+
+    // Refreshes the render FPS / inference Hz readout at most twice per second.
+    updateLoopStats() {
+        const now = performance.now();
+        if (now - this.loopStats.shownAt < 500) return;
+        this.loopStats.shownAt = now;
+        const fps = Math.round(rateOf(this.loopStats.render, now));
+        const hz = Math.round(rateOf(this.loopStats.inference, now));
+        this.dom.setStats(`Render ${fps} FPS · Inference ${hz} Hz`);
+    }
+
+    // Keeps the loops alive on errors; logs and surfaces each distinct error once instead of every frame.
+    reportLoopError(loopName, err) {
+        const key = String(err && err.message);
+        if (this.loopErrors[loopName] === key) return;
+        if (!this.hasLoopError()) this.statusBeforeError = this.dom.statusMessage;
+        this.loopErrors[loopName] = key;
+        console.error(`${loopName} loop error:`, err);
+        this.dom.setStatus(`Error in ${loopName.toLowerCase()} loop (see console).`);
+    }
+
+    // Called on each success; once every loop has recovered, restores the status the error replaced
+    // (unless something else has set the status since). A later repeat of the same error is logged again.
+    clearLoopError(loopName) {
+        if (!this.loopErrors[loopName]) return;
+        const errorStatus = this.dom.statusMessage;
+        delete this.loopErrors[loopName];
+        if (this.hasLoopError()) return;
+        if (errorStatus.startsWith('Error in ') && this.statusBeforeError !== null) {
+            this.dom.setStatus(this.statusBeforeError);
+        }
+        this.statusBeforeError = null;
+    }
+
+    hasLoopError() {
+        return Object.keys(this.loopErrors).length > 0;
+    }
+}
+
+// Upper bound on waiting for a camera frame, so the loop can't hang if frames stop (camera stopped, track ended).
+const VIDEO_FRAME_TIMEOUT_MS = 50; // ~1.5 frames at 30 FPS; bounds the wait if requestVideoFrameCallback never fires (e.g. hidden <video>).
+
+// Resolves in a new macrotask (MessageChannel avoids setTimeout's minimum-delay clamping).
+function yieldToEventLoop() {
+    return new Promise(resolve => {
+        const channel = new MessageChannel();
+        channel.port1.onmessage = () => {
+            channel.port1.close();
+            resolve();
+        };
+        channel.port2.postMessage(null);
+    });
+}
+
+// Resolves on the next presented camera frame (requestVideoFrameCallback), or after VIDEO_FRAME_TIMEOUT_MS,
+// whichever comes first. Without requestVideoFrameCallback it resolves at once (the caller still yields).
+function nextVideoFrame(video) {
+    if (!video.requestVideoFrameCallback) return Promise.resolve();
+    return new Promise(resolve => {
+        const timer = setTimeout(() => {
+            video.cancelVideoFrameCallback(handle);
+            resolve();
+        }, VIDEO_FRAME_TIMEOUT_MS);
+        const handle = video.requestVideoFrameCallback(() => {
+            clearTimeout(timer);
+            resolve();
+        });
+    });
+}
+
+// Event-rate meter: exponential moving average of the interval between events.
+function newRate() {
+    return { last: 0, avgInterval: 0 };
+}
+
+function tickRate(rate) {
+    const now = performance.now();
+    if (rate.last) {
+        const dt = now - rate.last;
+        rate.avgInterval = rate.avgInterval ? rate.avgInterval * 0.9 + dt * 0.1 : dt;
+    }
+    rate.last = now;
+}
+
+// Events per second; decays toward 0 when events stop.
+function rateOf(rate, now) {
+    if (!rate.avgInterval) return 0;
+    return 1000 / Math.max(rate.avgInterval, now - rate.last);
 }

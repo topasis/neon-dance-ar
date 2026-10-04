@@ -7,8 +7,9 @@ export class InstanceTracker {
         this.nextId = 0;
     }
 
-    update(detectedPoses) {
-        const t = performance.now() / 1000;
+    // timestampMs is when the poses were estimated (captured before inference started).
+    update(detectedPoses, timestampMs = performance.now()) {
+        const t = timestampMs / 1000;
         const matched = new Array(detectedPoses.length).fill(false);
         const newInstances = [];
 
