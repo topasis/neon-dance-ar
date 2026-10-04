@@ -182,15 +182,22 @@ Maintain a boolean flag `showCameraFeed`.
 - Expose a button to Play/Pause the music.
 
 #### Step 9 — Recording (Canvas + Audio)
-- Use `canvas.captureStream(30)` to get the visual stream.
+- Use `canvas.captureStream(CONFIG.CAMERA.FPS)` to get the visual stream.
 - Mix the audio track from the music element into this stream:
-  - Create an `AudioContext`.
+  - Create an `AudioContext` inside the record click handler (idempotent), so every recording has an audio track
+    even when no music is playing yet (music started later is recorded; avoids empty MP4s in Safari, WebKit bug 290002).
+  - Set `navigator.audioSession.type = 'playback'` where supported so music plays with the iPhone silent switch on.
   - Create a `MediaElementAudioSourceNode` from the `<audio>` element.
   - Connect it to `audioContext.destination` (to hear it) AND to a `MediaStreamAudioDestinationNode`.
   - Extract the audio track from the destination node's stream.
 - Combine the canvas video track and the audio track into a single `MediaStream`.
-- Use `MediaRecorder` to record the combined stream.
-- On stop, export as a WebM or MP4 file, create an object URL, and trigger a download via a dynamic `<a>` tag.
+- Use `MediaRecorder` to record the combined stream with the first supported type from
+  `video/mp4;codecs=avc1,mp4a.40.2` → `video/mp4` → `video/webm;codecs=vp9,opus` → `video/webm`; the file extension
+  follows the chosen type (see `docs/adr/0003-recording-format-and-sharing-on-mobile.md`).
+- On stop, keep the `Blob` and show a "Save / Share" button. On touch devices (`matchMedia('(pointer: coarse)')`)
+  where `navigator.canShare({ files: [file] })` is true, tapping it calls `navigator.share({ files: [file] })`;
+  otherwise (e.g. desktop, whose share sheets can't save to disk) it downloads via a dynamic `<a download>` tag and
+  revokes the object URL after a timeout.
 
 ---
 
