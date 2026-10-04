@@ -126,13 +126,17 @@ Setup a modular web project using ES6 modules:
   - `/ui/renderer.js` (Canvas drawing)
 - `app.js` (Entry point)
 
-Include TensorFlow.js and the MoveNet MultiPose model via CDN in the `<head>` of `index.html`:
+TensorFlow.js, pose-detection and the MoveNet MultiPose Lightning model are pinned and self-hosted (ADR 0004).
+Versions live in the `Makefile`; `make vendor` downloads the builds into `/vendor` and the model into
+`/models/movenet-multipose-lightning`. Both folders are committed to git. Load them in the `<head>` of `index.html`
+with `defer`, in this order:
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+<script defer src="vendor/tf-core.min.js"></script>
+<script defer src="vendor/tf-converter.min.js"></script>
+<script defer src="vendor/tf-backend-webgl.min.js"></script>
+<script defer src="vendor/pose-detection.min.js"></script>
 ```
+Pass `modelUrl: 'models/movenet-multipose-lightning/model.json'` to `createDetector()`.
 
 #### Step 2 — Camera & UI Initialization
 - Access the user's webcam via `navigator.mediaDevices.getUserMedia({ video: true })` and attach it to a hidden `<video>` element.

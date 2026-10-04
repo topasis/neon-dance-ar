@@ -11,7 +11,10 @@ export class PoseDetector {
         onStatusUpdate("Loading MoveNet MultiPose model...");
         this.detector = await poseDetection.createDetector(
             poseDetection.SupportedModels.MoveNet,
-            { modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING }
+            {
+                modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING,
+                modelUrl: 'models/movenet-multipose-lightning/model.json'
+            }
         );
         onStatusUpdate("Model loaded. Ready to start camera.");
     }
