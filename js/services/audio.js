@@ -16,15 +16,20 @@ export class AudioService {
             if (navigator.audioSession) navigator.audioSession.type = 'playback';
 
             const AudioContext = window.AudioContext || window.webkitAudioContext;
-            this.audioContext = new AudioContext();
-            this.audioSource = this.audioContext.createMediaElementSource(this.audioEl);
-            this.audioDestination = this.audioContext.createMediaStreamDestination();
+            const audioContext = new AudioContext();
+            const audioSource = audioContext.createMediaElementSource(this.audioEl);
+            const audioDestination = audioContext.createMediaStreamDestination();
 
-            this.audioSource.connect(this.audioDestination);
-            this.audioSource.connect(this.audioContext.destination);
+            audioSource.connect(audioDestination);
+            audioSource.connect(audioContext.destination);
+            // Assigned only once the whole graph is built, so a failed build is retried on the next tap.
+            this.audioContext = audioContext;
+            this.audioSource = audioSource;
+            this.audioDestination = audioDestination;
         }
-        if (this.audioContext.state === 'suspended') {
-            this.audioContext.resume();
+        // 'suspended', or 'interrupted' on iOS after a call or another app took the audio.
+        if (this.audioContext.state !== 'running') {
+            this.audioContext.resume().catch(() => {});
         }
     }
 

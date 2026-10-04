@@ -192,9 +192,10 @@ Maintain a boolean flag `showCameraFeed`.
 - Use `MediaRecorder` to record the combined stream with the first supported type from
   `video/mp4;codecs=avc1,mp4a.40.2` → `video/mp4` → `video/webm;codecs=vp9,opus` → `video/webm`; the file extension
   follows the chosen type (see `docs/adr/0003-recording-format-and-sharing-on-mobile.md`).
-- On stop, keep the `Blob` and show a "Save / Share" button. Tapping it calls `navigator.share({ files: [file] })` when
-  `navigator.canShare({ files: [file] })` is true; otherwise it downloads via a dynamic `<a download>` tag and revokes
-  the object URL after a timeout.
+- On stop, keep the `Blob` and show a "Save / Share" button. On touch devices (`matchMedia('(pointer: coarse)')`)
+  where `navigator.canShare({ files: [file] })` is true, tapping it calls `navigator.share({ files: [file] })`;
+  otherwise (e.g. desktop, whose share sheets can't save to disk) it downloads via a dynamic `<a download>` tag and
+  revokes the object URL after a timeout.
 
 ---
 

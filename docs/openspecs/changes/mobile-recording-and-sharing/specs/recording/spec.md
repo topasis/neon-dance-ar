@@ -24,15 +24,16 @@ Every recording SHALL include the music audio track, whether or not music is pla
 - **THEN** the saved video plays with silent audio and isn't empty
 
 ### Requirement: Save or share after recording
-After a recording stops, the app SHALL offer a "Save / Share" action that uses the Web Share API with files when
-available and falls back to a file download.
+After a recording stops, the app SHALL offer a "Save / Share" action that uses the Web Share API with files on touch
+devices (`(pointer: coarse)`) where file sharing is available, and otherwise downloads the file.
+Desktop share sheets can't save to disk, so desktops always download.
 
 #### Scenario: iPhone
 - **WHEN** the user taps "Save / Share" on iOS Safari
 - **THEN** the system share sheet opens with the video, offering "Save Video" and installed apps
 
-#### Scenario: Desktop without file sharing
-- **WHEN** `navigator.canShare({ files })` is false or unavailable
+#### Scenario: Desktop, or no file sharing
+- **WHEN** the device has no coarse pointer (desktop), or `navigator.canShare({ files })` is false or unavailable
 - **THEN** the video is downloaded with the correct extension
 
 ### Requirement: Recording frame rate from config

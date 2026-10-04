@@ -54,25 +54,27 @@ export class RecorderService {
 
     // Resolves to { blob, filename } once the recorder has flushed its last chunk.
     stop() {
-        if (this.isRecording && this.mediaRecorder) {
-            this.mediaRecorder.stop();
-            this.isRecording = false;
-        }
-        return this.stopped || Promise.reject(new Error("Nothing was recorded."));
+        if (!this.isRecording || !this.mediaRecorder) return Promise.reject(new Error("Not recording."));
+        this.mediaRecorder.stop();
+        this.isRecording = false;
+        const stopped = this.stopped;
+        this.stopped = null;
+        return stopped;
     }
 
-    // Opens the share sheet (iOS: "Save Video" to Photos, or straight to TikTok) where files can be shared,
-    // otherwise downloads the file. Must be called from a user gesture.
+    // On touch devices, opens the share sheet (iOS: "Save Video" to Photos, or straight to TikTok); desktop share
+    // sheets can't save to disk, so everywhere else the file is downloaded. Must be called from a user gesture.
+    // Rethrows AbortError (sheet closed), InvalidStateError (a share is already open) and NotAllowedError
+    // (gesture expired) instead of downloading as well.
     async save({ blob, filename }) {
         // Plain container type (no codecs parameter) so share targets recognise the file.
         const file = new File([blob], filename, { type: blob.type.split(';')[0] });
-        if (navigator.canShare?.({ files: [file] })) {
+        if (matchMedia('(pointer: coarse)').matches && navigator.canShare?.({ files: [file] })) {
             try {
                 await navigator.share({ files: [file] });
                 return;
             } catch (err) {
-                // The user closed the share sheet: nothing to do.
-                if (err.name === 'AbortError') return;
+                if (['AbortError', 'InvalidStateError', 'NotAllowedError'].includes(err.name)) throw err;
                 console.warn("Share failed, downloading instead:", err);
             }
         }

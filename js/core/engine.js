@@ -27,6 +27,7 @@ export class AppEngine {
             showCameraFeed: true
         };
         this.lastRecording = null; // { blob, filename } of the last finished take
+        this.sharing = false;      // a Save / Share is in progress; further taps are ignored
         this.animationId = null;
         // Incremented whenever the render loop is started or stopped; a frame from an older generation is discarded.
         this.loopGeneration = 0;
@@ -128,6 +129,12 @@ export class AppEngine {
             // Set up the audio graph inside the click so the recording always has an audio track: music started
             // later is recorded, and Safari doesn't write an empty MP4 for a video-only stream (WebKit bug 290002).
             this.audio.ensureRouting();
+        } catch (err) {
+            console.error("Audio setup error:", err);
+            this.dom.setStatus("Error: Could not set up audio for recording.");
+            return;
+        }
+        try {
             this.recorder.start(this.dom.canvas, this.audio.getStream());
             this.lastRecording = null;
             this.setState({ recording: 'on', recordingReady: false });
@@ -154,12 +161,19 @@ export class AppEngine {
 
     // Runs on its own tap: navigator.share() needs a fresh user gesture.
     async saveRecording() {
-        if (!this.lastRecording) return;
+        if (!this.lastRecording || this.sharing) return;
+        this.sharing = true;
         try {
             await this.recorder.save(this.lastRecording);
         } catch (err) {
-            console.error("Save error:", err);
-            this.dom.setStatus("Error: Could not save the video.");
+            if (err.name === 'NotAllowedError') {
+                this.dom.setStatus("Tap Save / Share again to share the video.");
+            } else if (err.name !== 'AbortError' && err.name !== 'InvalidStateError') {
+                console.error("Save error:", err);
+                this.dom.setStatus("Error: Could not save the video.");
+            }
+        } finally {
+            this.sharing = false;
         }
     }
 
