@@ -1,6 +1,6 @@
 # ADR 0004 — Pin and self-host TF.js and model weights
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-05
 
 ## Context
@@ -22,8 +22,8 @@ pick up a different release. The MoveNet weights are fetched at runtime from Goo
    weight shards) under `models/`, served from the same origin. Pass the local `modelUrl` to `createDetector()`.
 3. **Pre-cache** `vendor/` and `models/` in the Phase 2 service worker, keyed by version, so upgrades are explicit.
 
-No build step or package manager is introduced; the files are downloaded once and committed (or fetched by a
-`make vendor` target).
+No build step or package manager is introduced; the files are committed to git and re-fetched with the
+`make vendor` target when versions change. `tfjs-backend-webgpu` is vendored too but only loaded when opted in.
 
 ## Consequences
 
