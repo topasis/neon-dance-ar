@@ -4,6 +4,7 @@ export class DOMManager {
         this.btnBackground = document.getElementById('btn-background');
         this.btnMusic = document.getElementById('btn-music');
         this.btnRecord = document.getElementById('btn-record');
+        this.btnShare = document.getElementById('btn-share');
         this.statusText = document.getElementById('status');
         this.video = document.getElementById('video');
         this.canvas = document.getElementById('output-canvas');
@@ -27,13 +28,17 @@ export class DOMManager {
         this.btnMusic.innerText = state.music ? "Stop Music" : "Play Music";
         this.btnMusic.classList.toggle('active', state.music);
 
-        this.btnRecord.innerText = state.recording ? "Stop Recording" : "Start Recording";
-        this.btnRecord.classList.toggle('recording', state.recording);
-        this.btnRecord.disabled = !cameraOn;
+        const recording = state.recording === 'on';
+        this.btnRecord.innerText = recording ? "Stop Recording" : "Start Recording";
+        this.btnRecord.classList.toggle('recording', recording);
+        this.btnRecord.disabled = !cameraOn || state.recording === 'stopping';
+
+        this.btnShare.hidden = !state.recordingReady;
     }
 
     onCameraToggle(callback) { this.btnCamera.addEventListener('click', callback); }
     onBackgroundToggle(callback) { this.btnBackground.addEventListener('click', callback); }
     onMusicToggle(callback) { this.btnMusic.addEventListener('click', callback); }
     onRecordToggle(callback) { this.btnRecord.addEventListener('click', callback); }
+    onSaveRecording(callback) { this.btnShare.addEventListener('click', callback); }
 }

@@ -21,10 +21,12 @@ export class AppEngine {
         this.state = {
             model: 'loading',      // 'loading' | 'ready' | 'error'
             camera: 'off',         // 'off' | 'starting' | 'on'
-            recording: false,
+            recording: 'off',      // 'off' | 'on' | 'stopping'
+            recordingReady: false, // a finished take can be saved / shared
             music: false,
             showCameraFeed: true
         };
+        this.lastRecording = null; // { blob, filename } of the last finished take
         this.animationId = null;
         // Incremented whenever the render loop is started or stopped; a frame from an older generation is discarded.
         this.loopGeneration = 0;
@@ -54,6 +56,7 @@ export class AppEngine {
         this.dom.onBackgroundToggle(() => this.toggleBackground());
         this.dom.onMusicToggle(() => this.toggleMusic());
         this.dom.onRecordToggle(() => this.toggleRecording());
+        this.dom.onSaveRecording(() => this.saveRecording());
     }
 
     async toggleCamera() {
@@ -86,8 +89,8 @@ export class AppEngine {
     }
 
     stopCamera() {
-        // A recording never outlives the camera: stop it first so the file is still exported.
-        const wasRecording = this.state.recording;
+        // A recording never outlives the camera: stop it first so the take can still be saved.
+        const wasRecording = this.state.recording === 'on';
         if (wasRecording) this.stopRecording();
 
         this.loopGeneration++;
@@ -95,7 +98,7 @@ export class AppEngine {
         this.camera.stop();
         this.renderer.clear();
         this.setState({ camera: 'off' });
-        this.dom.setStatus(wasRecording ? "Camera stopped. Recording saved." : "Camera stopped.");
+        this.dom.setStatus(wasRecording ? "Camera stopped. Processing video..." : "Camera stopped.");
     }
 
     toggleBackground() {
@@ -112,7 +115,7 @@ export class AppEngine {
     }
 
     toggleRecording() {
-        if (this.state.recording) {
+        if (this.state.recording === 'on') {
             this.stopRecording();
         } else {
             this.startRecording();
@@ -120,21 +123,44 @@ export class AppEngine {
     }
 
     startRecording() {
-        if (this.state.camera !== 'on') return;
+        if (this.state.camera !== 'on' || this.state.recording !== 'off') return;
         try {
-            const audioStream = this.state.music ? this.audio.getStream() : null;
-            this.recorder.start(this.dom.canvas, audioStream);
-            this.setState({ recording: true });
+            // Set up the audio graph inside the click so the recording always has an audio track: music started
+            // later is recorded, and Safari doesn't write an empty MP4 for a video-only stream (WebKit bug 290002).
+            this.audio.ensureRouting();
+            this.recorder.start(this.dom.canvas, this.audio.getStream());
+            this.lastRecording = null;
+            this.setState({ recording: 'on', recordingReady: false });
             this.dom.setStatus("Recording...");
         } catch (err) {
+            console.error("Recording error:", err);
             this.dom.setStatus("Error: MediaRecorder not supported.");
         }
     }
 
-    stopRecording() {
-        this.recorder.stop();
-        this.setState({ recording: false });
+    async stopRecording() {
+        this.setState({ recording: 'stopping' });
         this.dom.setStatus("Recording stopped. Processing video...");
+        try {
+            this.lastRecording = await this.recorder.stop();
+            this.setState({ recording: 'off', recordingReady: true });
+            this.dom.setStatus("Recording ready. Tap Save / Share.");
+        } catch (err) {
+            console.error("Recording error:", err);
+            this.setState({ recording: 'off' });
+            this.dom.setStatus("Error: Recording failed.");
+        }
+    }
+
+    // Runs on its own tap: navigator.share() needs a fresh user gesture.
+    async saveRecording() {
+        if (!this.lastRecording) return;
+        try {
+            await this.recorder.save(this.lastRecording);
+        } catch (err) {
+            console.error("Save error:", err);
+            this.dom.setStatus("Error: Could not save the video.");
+        }
     }
 
     async renderLoop(generation) {
