@@ -16,6 +16,14 @@ within a threshold relative to the instance's bounding-box size.
 - **WHEN** person A and person B walk past each other
 - **THEN** each keeps the same instance ID and colour before and after crossing
 
+### Requirement: Resolution-independent matching distance
+(Moved from `unify-coordinate-mapping`, finding C3.)
+The maximum tracker matching distance SHALL be defined relative to the person's bounding-box size, not in fixed pixels.
+
+#### Scenario: Different camera resolutions
+- **WHEN** the same scene is captured at 640×480 and at 1280×720
+- **THEN** the same people are matched across frames in both cases
+
 ### Requirement: Invalid poses ignored
 Poses with no keypoint above the confidence threshold SHALL NOT be tracked.
 

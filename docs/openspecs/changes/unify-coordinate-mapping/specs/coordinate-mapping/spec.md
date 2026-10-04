@@ -19,10 +19,3 @@ SHALL both be drawn mirrored horizontally.
 #### Scenario: Mirroring disabled
 - **WHEN** `MIRROR_FRONT` is false
 - **THEN** video and skeletons are drawn unmirrored and aligned
-
-### Requirement: Resolution-independent matching distance
-The maximum tracker matching distance SHALL be defined relative to the person's bounding-box size, not in fixed pixels.
-
-#### Scenario: Different camera resolutions
-- **WHEN** the same scene is captured at 640×480 and at 1280×720
-- **THEN** the same people are matched across frames in both cases

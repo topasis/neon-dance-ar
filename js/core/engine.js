@@ -206,6 +206,7 @@ export class AppEngine {
         if (generation !== this.loopGeneration) return;
 
         try {
+            this.renderer.updateMapping(this.dom.video);
             this.renderer.renderBackground(this.dom.video, this.state.showCameraFeed);
             this.renderer.renderSkeletons(this.latestInstances);
             tickRate(this.loopStats.render);

@@ -5,7 +5,7 @@ export class Renderer {
     constructor(canvasElement) {
         this.canvas = canvasElement;
         this.ctx = canvasElement.getContext('2d');
-        // Video -> canvas mapping, refreshed by renderBackground() each frame; every keypoint is drawn through it.
+        // Video -> canvas mapping, refreshed by updateMapping() each frame; every keypoint is drawn through it.
         this.mapping = new CoordinateMapping();
         // Only the user-facing camera exists for now; Phase 2's camera switch updates this.
         this.facingMode = 'user';
@@ -16,18 +16,26 @@ export class Renderer {
         this.canvas.height = height;
     }
 
-    // The first draw of every frame: also refreshes the mapping used by renderSkeletons().
-    renderBackground(videoElement, showCameraFeed) {
+    // Call once per frame before any drawing: everything drawn from keypoints uses this mapping.
+    updateMapping(videoElement) {
         const mirrored = CONFIG.CAMERA.MIRROR_FRONT && this.facingMode === 'user';
         this.mapping.update(videoElement.videoWidth, videoElement.videoHeight,
             this.canvas.width, this.canvas.height, mirrored);
+    }
 
+    renderBackground(videoElement, showCameraFeed) {
         if (showCameraFeed && videoElement.srcObject) {
             // drawImage scales the frame to the canvas like the mapping does; the flip matches mapPoint().
             this.ctx.save();
-            if (mirrored) this.ctx.setTransform(-1, 0, 0, 1, this.canvas.width, 0);
-            this.ctx.drawImage(videoElement, 0, 0, this.canvas.width, this.canvas.height);
-            this.ctx.restore();
+            try {
+                if (this.mapping.mirrored) {
+                    this.ctx.translate(this.canvas.width, 0);
+                    this.ctx.scale(-1, 1);
+                }
+                this.ctx.drawImage(videoElement, 0, 0, this.canvas.width, this.canvas.height);
+            } finally {
+                this.ctx.restore();
+            }
         } else {
             this.ctx.fillStyle = '#000';
             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
