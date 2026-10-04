@@ -14,42 +14,22 @@ export class DOMManager {
         this.statusText.innerText = text;
     }
 
-    setCameraActive(isActive) {
-        if (isActive) {
-            this.btnCamera.innerText = "Stop Camera";
-            this.btnCamera.classList.add('active');
-            this.btnRecord.disabled = false;
-        } else {
-            this.btnCamera.innerText = "Start Camera";
-            this.btnCamera.classList.remove('active');
-            this.btnRecord.disabled = true;
-        }
-    }
+    // Sets every button's label, active styling and enabled flag from the engine state.
+    render(state) {
+        const cameraOn = state.camera === 'on';
+        this.btnCamera.innerText = cameraOn ? "Stop Camera" : "Start Camera";
+        this.btnCamera.classList.toggle('active', cameraOn);
+        this.btnCamera.disabled = state.model !== 'ready' || state.camera === 'starting';
 
-    setBackgroundLive(isLive) {
-        this.btnBackground.innerText = `Background: ${isLive ? 'Live' : 'Black'}`;
-        if (!isLive) this.btnBackground.classList.add('active');
-        else this.btnBackground.classList.remove('active');
-    }
+        this.btnBackground.innerText = `Background: ${state.showCameraFeed ? 'Live' : 'Black'}`;
+        this.btnBackground.classList.toggle('active', !state.showCameraFeed);
 
-    setMusicPlaying(isPlaying) {
-        if (isPlaying) {
-            this.btnMusic.innerText = "Stop Music";
-            this.btnMusic.classList.add('active');
-        } else {
-            this.btnMusic.innerText = "Play Music";
-            this.btnMusic.classList.remove('active');
-        }
-    }
+        this.btnMusic.innerText = state.music ? "Stop Music" : "Play Music";
+        this.btnMusic.classList.toggle('active', state.music);
 
-    setRecordingActive(isRecording) {
-        if (isRecording) {
-            this.btnRecord.innerText = "Stop Recording";
-            this.btnRecord.classList.add('recording');
-        } else {
-            this.btnRecord.innerText = "Start Recording";
-            this.btnRecord.classList.remove('recording');
-        }
+        this.btnRecord.innerText = state.recording ? "Stop Recording" : "Start Recording";
+        this.btnRecord.classList.toggle('recording', state.recording);
+        this.btnRecord.disabled = !cameraOn;
     }
 
     onCameraToggle(callback) { this.btnCamera.addEventListener('click', callback); }

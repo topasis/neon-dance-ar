@@ -17,14 +17,36 @@ export class AppEngine {
         this.recorder = new RecorderService();
         this.tracker = new InstanceTracker();
 
-        this.showCameraFeed = true;
+        // Single source of truth for app state; the UI is rendered from it via dom.render().
+        this.state = {
+            model: 'loading',      // 'loading' | 'ready' | 'error'
+            camera: 'off',         // 'off' | 'starting' | 'on'
+            recording: false,
+            music: false,
+            showCameraFeed: true
+        };
         this.animationId = null;
+        // Incremented whenever the render loop is started or stopped; a frame from an older generation is discarded.
+        this.loopGeneration = 0;
 
         this.bindEvents();
+        this.dom.render(this.state);
+    }
+
+    setState(changes) {
+        Object.assign(this.state, changes);
+        this.dom.render(this.state);
     }
 
     async start() {
-        await this.detector.init((msg) => this.dom.setStatus(msg));
+        try {
+            await this.detector.init((msg) => this.dom.setStatus(msg));
+            this.setState({ model: 'ready' });
+        } catch (err) {
+            console.error("Model load error:", err);
+            this.setState({ model: 'error' });
+            this.dom.setStatus("Error: Failed to load pose model.");
+        }
     }
 
     bindEvents() {
@@ -35,64 +57,93 @@ export class AppEngine {
     }
 
     async toggleCamera() {
-        if (this.camera.isPlaying) {
-            this.camera.stop();
-            cancelAnimationFrame(this.animationId);
-            this.renderer.clear();
-            this.dom.setCameraActive(false);
-            this.dom.setStatus("Camera stopped.");
+        if (this.state.model !== 'ready' || this.state.camera === 'starting') return;
+
+        if (this.state.camera === 'on') {
+            this.stopCamera();
         } else {
-            try {
-                this.dom.setStatus("Requesting camera access...");
-                const dimensions = await this.camera.start();
-                this.renderer.resize(dimensions.width, dimensions.height);
-                
-                this.dom.setCameraActive(true);
-                this.dom.setStatus("Running pose estimation...");
-                this.renderLoop();
-            } catch (err) {
-                console.error("Camera error:", err);
-                this.dom.setStatus("Error: Camera access denied.");
-            }
+            await this.startCamera();
         }
     }
 
+    async startCamera() {
+        this.setState({ camera: 'starting' });
+        try {
+            this.dom.setStatus("Requesting camera access...");
+            const dimensions = await this.camera.start();
+            this.renderer.resize(dimensions.width, dimensions.height);
+
+            this.setState({ camera: 'on' });
+            this.dom.setStatus("Running pose estimation...");
+            this.loopGeneration++;
+            this.renderLoop(this.loopGeneration);
+        } catch (err) {
+            console.error("Camera error:", err);
+            this.camera.stop();
+            this.setState({ camera: 'off' });
+            this.dom.setStatus("Error: Camera access denied.");
+        }
+    }
+
+    stopCamera() {
+        // A recording never outlives the camera: stop it first so the file is still exported.
+        const wasRecording = this.state.recording;
+        if (wasRecording) this.stopRecording();
+
+        this.loopGeneration++;
+        cancelAnimationFrame(this.animationId);
+        this.camera.stop();
+        this.renderer.clear();
+        this.setState({ camera: 'off' });
+        this.dom.setStatus(wasRecording ? "Camera stopped. Recording saved." : "Camera stopped.");
+    }
+
     toggleBackground() {
-        this.showCameraFeed = !this.showCameraFeed;
-        this.dom.setBackgroundLive(this.showCameraFeed);
+        this.setState({ showCameraFeed: !this.state.showCameraFeed });
     }
 
     async toggleMusic() {
         try {
             const isPlaying = await this.audio.toggle();
-            this.dom.setMusicPlaying(isPlaying);
+            this.setState({ music: isPlaying });
         } catch (err) {
             this.dom.setStatus("Error playing music. Check assets/music.mp3.");
         }
     }
 
     toggleRecording() {
-        if (this.recorder.isRecording) {
-            this.recorder.stop();
-            this.dom.setRecordingActive(false);
-            this.dom.setStatus("Recording stopped. Processing video...");
+        if (this.state.recording) {
+            this.stopRecording();
         } else {
-            try {
-                const audioStream = this.audio.isPlaying ? this.audio.getStream() : null;
-                this.recorder.start(this.dom.canvas, audioStream);
-                this.dom.setRecordingActive(true);
-                this.dom.setStatus("Recording...");
-            } catch (err) {
-                this.dom.setStatus("Error: MediaRecorder not supported.");
-            }
+            this.startRecording();
         }
     }
 
-    async renderLoop() {
-        if (!this.camera.isPlaying) return;
+    startRecording() {
+        if (this.state.camera !== 'on') return;
+        try {
+            const audioStream = this.state.music ? this.audio.getStream() : null;
+            this.recorder.start(this.dom.canvas, audioStream);
+            this.setState({ recording: true });
+            this.dom.setStatus("Recording...");
+        } catch (err) {
+            this.dom.setStatus("Error: MediaRecorder not supported.");
+        }
+    }
+
+    stopRecording() {
+        this.recorder.stop();
+        this.setState({ recording: false });
+        this.dom.setStatus("Recording stopped. Processing video...");
+    }
+
+    async renderLoop(generation) {
+        if (generation !== this.loopGeneration) return;
 
         let poses = await this.detector.estimatePoses(this.dom.video);
-        
+        // The camera was stopped (or restarted) while inference was in flight: drop this frame.
+        if (generation !== this.loopGeneration) return;
+
         poses = poses.filter(p => p.score > CONFIG.TRACKING.MIN_INSTANCE_SCORE);
         poses.sort((a, b) => b.score - a.score);
         if (poses.length > CONFIG.TRACKING.MAX_INSTANCES) {
@@ -101,9 +152,9 @@ export class AppEngine {
 
         const trackedInstances = this.tracker.update(poses);
 
-        this.renderer.renderBackground(this.dom.video, this.showCameraFeed);
+        this.renderer.renderBackground(this.dom.video, this.state.showCameraFeed);
         this.renderer.renderSkeletons(trackedInstances);
 
-        this.animationId = requestAnimationFrame(() => this.renderLoop());
+        this.animationId = requestAnimationFrame(() => this.renderLoop(generation));
     }
 }

@@ -29,8 +29,4 @@ export class CameraService {
             this.video.srcObject = null;
         }
     }
-    
-    get isPlaying() {
-        return this.video.srcObject !== null;
-    }
 }
