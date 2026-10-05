@@ -26,7 +26,10 @@ export class PoseDetector {
             {
                 modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING,
                 modelUrl: 'models/movenet-multipose-lightning/model.json',
-                multiPoseMaxDimension: CONFIG.MODEL.MAX_DIMENSION
+                multiPoseMaxDimension: CONFIG.MODEL.MAX_DIMENSION,
+                // Both default to true for MultiPose; InstanceTracker and its One Euro filters do this instead.
+                enableSmoothing: false,
+                enableTracking: false
             }
         );
         // A lost context makes every later estimate fail (or silently return nothing): fail fast so reset() runs.

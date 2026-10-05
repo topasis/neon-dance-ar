@@ -9,8 +9,10 @@ the pose-detection library's built-in smoothing and tracking SHALL be disabled.
 - **THEN** `enableSmoothing` and `enableTracking` are `false`
 
 ### Requirement: Global nearest-first matching
-Each frame, the tracker SHALL match detections to existing instances by ascending distance across all pairs,
-within a threshold relative to the instance's bounding-box size.
+Each estimate, the tracker SHALL match detections to existing instances by ascending distance across all pairs.
+A pair SHALL only match if the distance between their bounding-box centres is at most
+`MAX_DISTANCE_RATIO × max(instance diagonal, detection diagonal, MIN_MATCH_DIAG_PX)`, where the diagonals are those
+of the confident keypoints' bounding boxes.
 
 #### Scenario: Two people cross
 - **WHEN** person A and person B walk past each other
@@ -43,12 +45,12 @@ A new instance SHALL receive the first palette colour not used by any currently 
 - **THEN** all five colours are different
 
 ### Requirement: No frozen ghosts
-An unmatched instance SHALL remain available for re-matching for `GRACE_PERIOD_FRAMES` but SHALL only be drawn for
-`RENDER_GRACE_FRAMES`.
+An unmatched instance SHALL remain available for re-matching for `GRACE_PERIOD_MS` but SHALL only be drawn for
+`RENDER_GRACE_MS` (both measured with the estimate timestamps).
 
 #### Scenario: Person leaves the frame
 - **WHEN** a person walks out of view
-- **THEN** their skeleton disappears after at most `RENDER_GRACE_FRAMES` frames
+- **THEN** their skeleton disappears at the first estimate more than `RENDER_GRACE_MS` after they were last seen
 
 #### Scenario: One-frame dropout
 - **WHEN** a person is missed for one frame and detected again
