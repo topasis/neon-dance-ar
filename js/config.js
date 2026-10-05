@@ -6,7 +6,9 @@ export const CONFIG = {
         MIRROR_FRONT: true    // draw the user-facing camera mirrored (video and skeletons, so recordings too)
     },
     RENDER: {
-        GLOW_BLUR: 15,
+        GLOW_SCALE: 0.125,    // size of the offscreen glow layer relative to the output canvas
+        GLOW_LINE_WIDTH: 12,  // bone width on the glow layer, in output pixels (the halo's width)
+        GLOW_ALPHA: 0.3,      // strength of the halo when the glow layer is added onto the frame
         LINE_WIDTH: 3,
         JOINT_RADIUS: 4
     },

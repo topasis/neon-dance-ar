@@ -49,7 +49,7 @@ Development is split into three phases:
 ### Rendering
 
 - **Canvas API:** HTML5 `<canvas>` API with 2D context.
-- **Glow Effect:** Achieved using Canvas native `shadowBlur` and `shadowColor` properties, combined with `globalCompositeOperation = 'lighter'` for additive blending.
+- **Glow Effect:** A downscaled offscreen glow layer (see `docs/adr/0002-glow-rendering-without-shadowblur.md`): skeletons are drawn with thick lines into a small canvas (`CONFIG.RENDER.GLOW_SCALE` of the output), which is upscaled onto the main canvas with smoothing as a soft halo; the crisp lines are drawn on top. Both use `globalCompositeOperation = 'lighter'` for additive blending. `shadowBlur` is not used (too slow on mobile).
 
 ### Threading & Concurrency
 
@@ -165,10 +165,11 @@ Suggested palette:
 **Keypoint connections (COCO 17-keypoint topology):**
 Draw lines and circles on the canvas context (`ctx`).
 For the glow effect:
-- Set `ctx.shadowBlur = 15` (tune as needed).
-- Set `ctx.shadowColor = instanceColor`.
-- Set `ctx.globalCompositeOperation = "lighter"`.
-- Set `ctx.lineWidth = 3` and `ctx.strokeStyle = instanceColor`.
+- Glow pass: clear an offscreen canvas at `GLOW_SCALE` (e.g. 0.125) of the output size, apply a matching scale
+  transform, and draw the skeletons there with `globalCompositeOperation = "lighter"` and `lineWidth = GLOW_LINE_WIDTH`.
+- Draw that canvas onto `ctx` upscaled to the full size, with `"lighter"`, `globalAlpha = GLOW_ALPHA` and
+  `imageSmoothingEnabled = true` (the upscale softens it into a halo). Don't use `shadowBlur` or `ctx.filter`.
+- Crisp pass: set `ctx.globalCompositeOperation = "lighter"`, `ctx.lineWidth = 3` and `ctx.strokeStyle = instanceColor`.
 - Draw the bones (lines) and joints (circles). Skip keypoints with a confidence score `< 0.3`.
 - Reset `globalCompositeOperation = "source-over"` after drawing skeletons.
 

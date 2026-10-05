@@ -12,8 +12,15 @@ export class Renderer {
         // Extension points (Phase 3 assets, decorations). Both receive canvas-mapped coordinates and the ctx to draw on.
         // keypoint index -> drawFn(ctx, keypoint, instance, color, points); drawn instead of that joint's circle.
         this.landmarkOverrides = new Map();
-        // drawFn(ctx, instance, color, points), called once per instance after bones and joints.
+        // drawFn(ctx, instance, color, points), called once per instance after bones and joints, in both passes.
         this.decorators = [];
+
+        // Offscreen glow layer at CONFIG.RENDER.GLOW_SCALE of the output size; sized in resize().
+        this.glowCanvas = document.createElement('canvas');
+        this.glowCtx = this.glowCanvas.getContext('2d');
+        this.glowStyle = { glow: true, lineWidth: CONFIG.RENDER.GLOW_LINE_WIDTH, jointRadius: CONFIG.RENDER.GLOW_LINE_WIDTH / 2 };
+        this.crispStyle = { glow: false, lineWidth: CONFIG.RENDER.LINE_WIDTH, jointRadius: CONFIG.RENDER.JOINT_RADIUS };
+        this.resizeGlow();
     }
 
     // drawFn runs with ctx translated to the keypoint's canvas position, so it draws around (0, 0). keypoint is
@@ -27,7 +34,8 @@ export class Renderer {
         this.landmarkOverrides.delete(index);
     }
 
-    // Decorators draw in canvas pixels with the instance's glow style set; any ctx state they change is restored after each call.
+    // Decorators draw in canvas pixels with the pass's colour and line width set (thick on the glow layer, thin in the
+    // crisp pass); any ctx state they change is restored after each call.
     addDecorator(drawFn) {
         this.decorators.push(drawFn);
     }
@@ -35,6 +43,12 @@ export class Renderer {
     resize(width, height) {
         this.canvas.width = width;
         this.canvas.height = height;
+        this.resizeGlow();
+    }
+
+    resizeGlow() {
+        this.glowCanvas.width = Math.max(1, Math.round(this.canvas.width * CONFIG.RENDER.GLOW_SCALE));
+        this.glowCanvas.height = Math.max(1, Math.round(this.canvas.height * CONFIG.RENDER.GLOW_SCALE));
     }
 
     // Call once per frame before any drawing: everything drawn from keypoints uses this mapping.
@@ -64,61 +78,102 @@ export class Renderer {
     }
 
     renderSkeletons(trackedInstances) {
-        // save/restore resets the glow and blend state even if drawing throws partway through.
+        if (trackedInstances.length === 0) return;
+        const frame = trackedInstances.map(inst => ({
+            inst,
+            color: CONFIG.NEON_COLORS[inst.colorIndex],
+            points: inst.keypoints.map(kp => this.mapping.mapPoint(kp.x, kp.y))
+        }));
+        this.renderGlowPass(ctx => this.drawSkeletons(ctx, frame, this.glowStyle));
+        this.renderCrispPass(ctx => this.drawSkeletons(ctx, frame, this.crispStyle));
+    }
+
+    // Glow: drawFn(ctx) draws in canvas pixels onto the small offscreen canvas (a scale transform shrinks it,
+    // line widths included); the result is upscaled additively onto the main canvas, where smoothing turns it into
+    // a soft halo. One blur-like upscale per frame, whatever the number of people.
+    renderGlowPass(drawFn) {
+        const g = this.glowCtx;
+        g.save();
+        try {
+            g.clearRect(0, 0, this.glowCanvas.width, this.glowCanvas.height);
+            g.setTransform(this.glowCanvas.width / this.canvas.width, 0, 0,
+                this.glowCanvas.height / this.canvas.height, 0, 0);
+            g.globalCompositeOperation = 'lighter';
+            drawFn(g);
+        } finally {
+            g.restore();
+        }
+
         this.ctx.save();
         try {
-            for (const inst of trackedInstances) {
-                const color = CONFIG.NEON_COLORS[inst.colorIndex];
-                const points = inst.keypoints.map(kp => this.mapping.mapPoint(kp.x, kp.y));
-
-                this.ctx.shadowBlur = CONFIG.RENDER.GLOW_BLUR;
-                this.ctx.shadowColor = color;
-                this.ctx.globalCompositeOperation = "lighter";
-                this.ctx.strokeStyle = color;
-                this.ctx.fillStyle = color;
-                this.ctx.lineWidth = CONFIG.RENDER.LINE_WIDTH;
-
-                for (const [i, j] of CONFIG.CONNECTIONS) {
-                    const kp1 = inst.keypoints[i];
-                    const kp2 = inst.keypoints[j];
-                    if (kp1.score > CONFIG.TRACKING.MIN_CONFIDENCE && kp2.score > CONFIG.TRACKING.MIN_CONFIDENCE) {
-                        this.ctx.beginPath();
-                        this.ctx.moveTo(points[i].x, points[i].y);
-                        this.ctx.lineTo(points[j].x, points[j].y);
-                        this.ctx.stroke();
-                    }
-                }
-
-                inst.keypoints.forEach((kp, k) => {
-                    if (kp.score > CONFIG.TRACKING.MIN_CONFIDENCE) {
-                        const override = this.landmarkOverrides.get(k);
-                        if (override) {
-                            this.ctx.save();
-                            try {
-                                this.ctx.translate(points[k].x, points[k].y);
-                                override(this.ctx, { x: points[k].x, y: points[k].y, score: kp.score }, inst, color, points);
-                            } finally {
-                                this.ctx.restore();
-                            }
-                        } else {
-                            this.ctx.beginPath();
-                            this.ctx.arc(points[k].x, points[k].y, CONFIG.RENDER.JOINT_RADIUS, 0, 2 * Math.PI);
-                            this.ctx.fill();
-                        }
-                    }
-                });
-
-                for (const decorate of this.decorators) {
-                    this.ctx.save();
-                    try {
-                        decorate(this.ctx, inst, color, points);
-                    } finally {
-                        this.ctx.restore();
-                    }
-                }
-            }
+            this.ctx.globalCompositeOperation = 'lighter';
+            this.ctx.globalAlpha = CONFIG.RENDER.GLOW_ALPHA;
+            this.ctx.imageSmoothingEnabled = true;
+            this.ctx.imageSmoothingQuality = 'high';
+            this.ctx.drawImage(this.glowCanvas, 0, 0, this.canvas.width, this.canvas.height);
         } finally {
             this.ctx.restore();
+        }
+    }
+
+    // Crisp core lines on top of the glow, additively; save/restore resets the blend state even if drawing throws.
+    renderCrispPass(drawFn) {
+        this.ctx.save();
+        try {
+            this.ctx.globalCompositeOperation = 'lighter';
+            drawFn(this.ctx);
+        } finally {
+            this.ctx.restore();
+        }
+    }
+
+    // Bones, joints (or landmark overrides, crisp pass only) and decorators of every instance, onto ctx.
+    drawSkeletons(ctx, frame, style) {
+        for (const { inst, color, points } of frame) {
+            ctx.strokeStyle = color;
+            ctx.fillStyle = color;
+            ctx.lineWidth = style.lineWidth;
+
+            for (const [i, j] of CONFIG.CONNECTIONS) {
+                const kp1 = inst.keypoints[i];
+                const kp2 = inst.keypoints[j];
+                if (kp1.score > CONFIG.TRACKING.MIN_CONFIDENCE && kp2.score > CONFIG.TRACKING.MIN_CONFIDENCE) {
+                    ctx.beginPath();
+                    ctx.moveTo(points[i].x, points[i].y);
+                    ctx.lineTo(points[j].x, points[j].y);
+                    ctx.stroke();
+                }
+            }
+
+            inst.keypoints.forEach((kp, k) => {
+                if (kp.score > CONFIG.TRACKING.MIN_CONFIDENCE) {
+                    const override = this.landmarkOverrides.get(k);
+                    if (override) {
+                        // Assets are drawn crisp only; the glow pass leaves no blurred dot under them.
+                        if (style.glow) return;
+                        ctx.save();
+                        try {
+                            ctx.translate(points[k].x, points[k].y);
+                            override(ctx, { x: points[k].x, y: points[k].y, score: kp.score }, inst, color, points);
+                        } finally {
+                            ctx.restore();
+                        }
+                    } else {
+                        ctx.beginPath();
+                        ctx.arc(points[k].x, points[k].y, style.jointRadius, 0, 2 * Math.PI);
+                        ctx.fill();
+                    }
+                }
+            });
+
+            for (const decorate of this.decorators) {
+                ctx.save();
+                try {
+                    decorate(ctx, inst, color, points);
+                } finally {
+                    ctx.restore();
+                }
+            }
         }
     }
 
