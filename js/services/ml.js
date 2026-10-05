@@ -16,7 +16,10 @@ export class PoseDetector {
             {
                 modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING,
                 modelUrl: 'models/movenet-multipose-lightning/model.json',
-                multiPoseMaxDimension: CONFIG.MODEL.MAX_DIMENSION
+                multiPoseMaxDimension: CONFIG.MODEL.MAX_DIMENSION,
+                // Both default to true for MultiPose; InstanceTracker and its One Euro filters do this instead.
+                enableSmoothing: false,
+                enableTracking: false
             }
         );
         onStatusUpdate("Model loaded. Ready to start camera.");

@@ -1,4 +1,4 @@
-.PHONY: install vendor run run-https certs
+.PHONY: install vendor run run-https certs test
 
 CERT_DIR := .certs
 CERT := $(CERT_DIR)/cert.pem
@@ -27,6 +27,11 @@ vendor:
 	curl -fsSL -o vendor/tf-backend-webgpu.min.js $(CDN)/@tensorflow/tfjs-backend-webgpu@$(TFJS_VERSION)/dist/tf-backend-webgpu.min.js
 	curl -fsSL -o vendor/pose-detection.min.js $(CDN)/@tensorflow-models/pose-detection@$(POSE_DETECTION_VERSION)/dist/pose-detection.min.js
 	for f in $(MODEL_FILES); do curl -fsSL -o $(MODEL_DIR)/$$f "$(MODEL_URL)/$$f?tfjs-format=file" || exit 1; done
+
+# Unit tests for the pure logic modules (Node's built-in test runner, no npm). Node treats the .js files as ES
+# modules by syntax detection, so no package.json is needed.
+test:
+	node --test 'tests/*.test.js'
 
 run:
 	@echo "Starting local server at http://localhost:8000"

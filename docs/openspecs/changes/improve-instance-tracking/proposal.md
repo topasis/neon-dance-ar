@@ -23,8 +23,10 @@
   pairs greedily, skipping used ones.
 - Colour assignment: a new instance gets the lowest palette index not used by any currently tracked instance;
   the colour is kept while the instance lives. First person = `#00FFFF`.
-- Split grace periods: keep unmatched instances for matching for `GRACE_PERIOD_FRAMES` (30), but only render them for
-  `RENDER_GRACE_FRAMES` (e.g. 3) to hide one-frame dropouts without showing frozen ghosts.
+- Split grace periods: keep unmatched instances for matching for `GRACE_PERIOD_MS` (1000), but only render them for
+  `RENDER_GRACE_MS` (150) to hide one-estimate dropouts without showing frozen ghosts. Time-based, because the tracker
+  runs per estimate, not per rendered frame.
+- `tracker.reset()` on loop start, so a camera restart starts with no tracked people.
 - For keypoints with score below `MIN_CONFIDENCE`, keep the last filtered position and don't update that keypoint's
   filter; store the new low score so it's skipped when drawing.
 - Add small unit tests for `OneEuroFilter` and `InstanceTracker` (plain ES modules runnable in the browser or Node,
@@ -32,4 +34,4 @@
 
 ## Impact
 - Affected specs: `instance-tracking`
-- Affected code: `js/logic/tracker.js`, `js/services/ml.js`, `js/config.js`, `js/ui/renderer.js` (skip non-rendered instances)
+- Affected code: `js/logic/tracker.js`, `js/services/ml.js`, `js/config.js`, `js/core/engine.js` (reset), `tests/`, `Makefile`
