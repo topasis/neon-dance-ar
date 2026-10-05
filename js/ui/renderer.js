@@ -27,7 +27,7 @@ export class Renderer {
         this.landmarkOverrides.delete(index);
     }
 
-    // Decorators draw in canvas pixels with the instance's glow style set, and must leave the transform as they found it.
+    // Decorators draw in canvas pixels with the instance's glow style set; any ctx state they change is restored after each call.
     addDecorator(drawFn) {
         this.decorators.push(drawFn);
     }
@@ -109,7 +109,12 @@ export class Renderer {
                 });
 
                 for (const decorate of this.decorators) {
-                    decorate(this.ctx, inst, color, points);
+                    this.ctx.save();
+                    try {
+                        decorate(this.ctx, inst, color, points);
+                    } finally {
+                        this.ctx.restore();
+                    }
                 }
             }
         } finally {
