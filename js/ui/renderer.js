@@ -9,6 +9,27 @@ export class Renderer {
         this.mapping = new CoordinateMapping();
         // Only the user-facing camera exists for now; Phase 2's camera switch updates this.
         this.facingMode = 'user';
+        // Extension points (Phase 3 assets, decorations). Both receive canvas-mapped coordinates and the ctx to draw on.
+        // keypoint index -> drawFn(ctx, keypoint, instance, color, points); drawn instead of that joint's circle.
+        this.landmarkOverrides = new Map();
+        // drawFn(ctx, instance, color, points), called once per instance after bones and joints.
+        this.decorators = [];
+    }
+
+    // drawFn runs with ctx translated to the keypoint's canvas position, so it draws around (0, 0). keypoint is
+    // { x, y, score } in canvas pixels; points holds every keypoint of the instance in canvas pixels (e.g. for a
+    // tilt angle from a reference pair); instance is the tracked instance (its own keypoints are in video pixels).
+    setLandmarkOverride(index, drawFn) {
+        this.landmarkOverrides.set(index, drawFn);
+    }
+
+    clearLandmarkOverride(index) {
+        this.landmarkOverrides.delete(index);
+    }
+
+    // Decorators draw in canvas pixels with the instance's glow style set, and must leave the transform as they found it.
+    addDecorator(drawFn) {
+        this.decorators.push(drawFn);
     }
 
     resize(width, height) {
@@ -70,39 +91,53 @@ export class Renderer {
 
                 inst.keypoints.forEach((kp, k) => {
                     if (kp.score > CONFIG.TRACKING.MIN_CONFIDENCE) {
-                        this.ctx.beginPath();
-                        this.ctx.arc(points[k].x, points[k].y, CONFIG.RENDER.JOINT_RADIUS, 0, 2 * Math.PI);
-                        this.ctx.fill();
+                        const override = this.landmarkOverrides.get(k);
+                        if (override) {
+                            this.ctx.save();
+                            try {
+                                this.ctx.translate(points[k].x, points[k].y);
+                                override(this.ctx, { x: points[k].x, y: points[k].y, score: kp.score }, inst, color, points);
+                            } finally {
+                                this.ctx.restore();
+                            }
+                        } else {
+                            this.ctx.beginPath();
+                            this.ctx.arc(points[k].x, points[k].y, CONFIG.RENDER.JOINT_RADIUS, 0, 2 * Math.PI);
+                            this.ctx.fill();
+                        }
                     }
                 });
 
-                this.renderCircleAroundFace(inst.keypoints, points);
+                for (const decorate of this.decorators) {
+                    decorate(this.ctx, inst, color, points);
+                }
             }
         } finally {
             this.ctx.restore();
         }
     }
 
-    // keypoints carry the scores; points are the same keypoints mapped to canvas coordinates.
-    renderCircleAroundFace(keypoints, points) {
-        const [nose, leftEye, rightEye] = keypoints;
-
-        if (nose && leftEye && rightEye &&
-            nose.score > CONFIG.TRACKING.MIN_CONFIDENCE &&
-            leftEye.score > CONFIG.TRACKING.MIN_CONFIDENCE &&
-            rightEye.score > CONFIG.TRACKING.MIN_CONFIDENCE) {
-
-            const dx = points[1].x - points[2].x;
-            const dy = points[1].y - points[2].y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-
-            this.ctx.beginPath();
-            this.ctx.arc(points[0].x, points[0].y, distance, 0, 2 * Math.PI);
-            this.ctx.stroke();
-        }
-    }
-
     clear() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    }
+}
+
+// Decorator: a circle around the face, centred on the nose with the eye distance as radius.
+// instance.keypoints carry the scores; points are the same keypoints mapped to canvas coordinates.
+export function drawFaceCircle(ctx, instance, color, points) {
+    const [nose, leftEye, rightEye] = instance.keypoints;
+
+    if (nose && leftEye && rightEye &&
+        nose.score > CONFIG.TRACKING.MIN_CONFIDENCE &&
+        leftEye.score > CONFIG.TRACKING.MIN_CONFIDENCE &&
+        rightEye.score > CONFIG.TRACKING.MIN_CONFIDENCE) {
+
+        const dx = points[1].x - points[2].x;
+        const dy = points[1].y - points[2].y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        ctx.beginPath();
+        ctx.arc(points[0].x, points[0].y, distance, 0, 2 * Math.PI);
+        ctx.stroke();
     }
 }
