@@ -27,19 +27,29 @@ export class AudioService {
             this.audioSource = audioSource;
             this.audioDestination = audioDestination;
         }
-        // 'suspended', or 'interrupted' on iOS after a call or another app took the audio.
-        if (this.audioContext.state !== 'running') {
+        this.resume();
+    }
+
+    // Restarts the AudioContext when it is 'suspended', or 'interrupted' on iOS after a call, another app took
+    // the audio or the page was in the background. A no-op before the first Play Music / Start Recording tap.
+    resume() {
+        if (this.audioContext && this.audioContext.state !== 'running') {
             this.audioContext.resume().catch(() => {});
         }
     }
 
+    // Stops and rewinds the music; also cancels a play() still in flight.
+    stop() {
+        this.pendingPlay = null;
+        this.audioEl.pause();
+        this.audioEl.currentTime = 0;
+        this.isPlaying = false;
+    }
+
     async toggle() {
         if (this.isPlaying || this.pendingPlay) {
-            // Also cancels a play() still in flight, so a quick second tap stops the music.
-            this.pendingPlay = null;
-            this.audioEl.pause();
-            this.audioEl.currentTime = 0;
-            this.isPlaying = false;
+            // A quick second tap also stops a play() still in flight.
+            this.stop();
             return this.isPlaying;
         }
 

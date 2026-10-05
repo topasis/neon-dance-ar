@@ -11,7 +11,8 @@ export const CONFIG = {
     },
     MODEL: {
         MAX_DIMENSION: 256,   // MoveNet multiPoseMaxDimension; must be a multiple of 32
-        BACKEND: 'webgl'      // 'webgl' (default) or 'webgpu' (opt-in, falls back to WebGL on failure)
+        BACKEND: 'webgl',     // 'webgl' (default) or 'webgpu' (opt-in, falls back to WebGL on failure)
+        MAX_CONSECUTIVE_FAILURES: 5 // failed estimates in a row before the detector is disposed and re-initialised
     },
     TRACKING: {
         MIN_CONFIDENCE: 0.3,
@@ -19,6 +20,9 @@ export const CONFIG = {
         MAX_INSTANCES: 5,
         MAX_DISTANCE_PX: 100,
         GRACE_PERIOD_FRAMES: 30
+    },
+    LIFECYCLE: {
+        METADATA_TIMEOUT_MS: 5000 // camera start fails if the video has no metadata by then
     },
     NEON_COLORS: [
         '#00FFFF', '#FF00FF', '#00FF00', '#FFA500', 

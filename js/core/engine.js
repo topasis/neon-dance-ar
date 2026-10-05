@@ -40,6 +40,10 @@ export class AppEngine {
         this.loopErrors = {};
         // Status message shown before a loop error replaced it, restored once all loops recover.
         this.statusBeforeError = null;
+        // Incremented by every camera start and stop; a start that sees a newer value was cancelled by a stop.
+        this.cameraSession = 0;
+        // Music was stopped because the page was hidden.
+        this.musicStoppedInBackground = false;
 
         this.bindEvents();
         this.dom.render(this.state);
@@ -67,6 +71,13 @@ export class AppEngine {
         this.dom.onMusicToggle(() => this.toggleMusic());
         this.dom.onRecordToggle(() => this.toggleRecording());
         this.dom.onSaveRecording(() => this.saveRecording());
+        this.camera.onEnded = () => this.handleCameraEnded();
+        // The video size changes when the phone rotates; keep the canvas (and recording) at the video's size.
+        this.dom.video.addEventListener('resize', () => this.handleVideoResize());
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) this.enterBackground();
+            else this.leaveBackground();
+        });
     }
 
     async toggleCamera() {
@@ -80,6 +91,7 @@ export class AppEngine {
     }
 
     async startCamera() {
+        const session = ++this.cameraSession;
         this.setState({ camera: 'starting' });
         try {
             this.dom.setStatus("Requesting camera access...");
@@ -88,25 +100,65 @@ export class AppEngine {
 
             this.setState({ camera: 'on' });
             this.dom.setStatus("Running pose estimation...");
-            this.startLoops();
+            // Started while hidden: the loops start when the page becomes visible.
+            if (!document.hidden) this.startLoops();
         } catch (err) {
+            // stopCamera() ran while the camera was starting; it already reset the state.
+            if (session !== this.cameraSession) return;
             console.error("Camera error:", err);
             this.camera.stop();
             this.setState({ camera: 'off' });
-            this.dom.setStatus("Error: Camera access denied.");
+            this.dom.setStatus(cameraErrorMessage(err));
         }
     }
 
-    stopCamera() {
+    // Safe in any camera state; cancels a start in progress. `reason` replaces the default status message.
+    stopCamera(reason = null) {
+        this.cameraSession++;
         // A recording never outlives the camera: stop it first so the take can still be saved.
         const wasRecording = this.state.recording === 'on';
-        if (wasRecording) this.stopRecording();
+        if (wasRecording) this.stopRecording(reason ? `${reason} ` : '');
 
         this.stopLoops();
         this.camera.stop();
         this.renderer.clear();
         this.setState({ camera: 'off' });
-        this.dom.setStatus(wasRecording ? "Camera stopped. Processing video..." : "Camera stopped.");
+        const status = reason || "Camera stopped.";
+        this.dom.setStatus(wasRecording ? `${status} Processing video...` : status);
+    }
+
+    handleCameraEnded() {
+        if (this.state.camera === 'off') return;
+        this.stopCamera("Camera disconnected.");
+    }
+
+    handleVideoResize() {
+        const { videoWidth, videoHeight } = this.dom.video;
+        if (this.state.camera !== 'on' || !videoWidth || !videoHeight) return;
+        this.renderer.resize(videoWidth, videoHeight);
+    }
+
+    // Page hidden (app switch, screen lock): keep the take, stop the music and pause inference.
+    enterBackground() {
+        if (this.state.recording === 'on') this.stopRecording("Recording stopped in the background. ");
+        if (this.state.music) this.musicStoppedInBackground = true;
+        this.audio.stop();
+        this.setState({ music: false });
+        if (this.state.camera === 'on') this.stopLoops();
+    }
+
+    // Page visible again: music stays stopped until the next tap, the camera resumes or reports that it ended.
+    leaveBackground() {
+        if (this.musicStoppedInBackground) {
+            this.musicStoppedInBackground = false;
+            this.audio.resume();
+        }
+        if (this.state.camera !== 'on') return;
+        if (!this.camera.isLive()) {
+            this.stopCamera("Camera stopped while the app was in the background.");
+            return;
+        }
+        this.startLoops();
     }
 
     toggleBackground() {
@@ -152,13 +204,14 @@ export class AppEngine {
         }
     }
 
-    async stopRecording() {
+    // `reason` (e.g. "Camera disconnected. ") prefixes the final status message.
+    async stopRecording(reason = '') {
         this.setState({ recording: 'stopping' });
         this.dom.setStatus("Recording stopped. Processing video...");
         try {
             this.lastRecording = await this.recorder.stop();
             this.setState({ recording: 'off', recordingReady: true });
-            this.dom.setStatus("Recording ready. Tap Save / Share.");
+            this.dom.setStatus(`${reason}Recording ready. Tap Save / Share.`);
         } catch (err) {
             console.error("Recording error:", err);
             this.setState({ recording: 'off' });
@@ -248,8 +301,34 @@ export class AppEngine {
                 if (generation !== this.loopGeneration) return;
                 // Falls through to the frame wait below, so a persistent failure retries at most once per camera frame.
                 this.reportLoopError('Inference', err);
+                if (this.detector.consecutiveFailures >= CONFIG.MODEL.MAX_CONSECUTIVE_FAILURES) {
+                    if (!(await this.recoverDetector(generation))) return;
+                }
             }
             await Promise.all([newFrame, yieldToEventLoop()]);
+        }
+    }
+
+    // Disposes and re-initialises the detector (e.g. after a GPU context loss). Returns whether the loop of
+    // `generation` should continue; if the reset failed the camera is stopped and the model is marked as failed.
+    async recoverDetector(generation) {
+        this.dom.setStatus("Recovering pose detection...");
+        const reset = this.detector.reset();
+        // A loop restarted meanwhile (camera stop / start, page hidden / visible) waits for the reset to finish.
+        this.estimateSettled = reset.then(() => {}, () => {});
+        try {
+            await reset;
+            console.warn("Pose detector re-initialised after repeated inference failures.");
+            if (generation !== this.loopGeneration) return false;
+            this.dom.setStatus(this.statusBeforeError || "Running pose estimation...");
+            return true;
+        } catch (err) {
+            console.error("Pose detector reset failed:", err);
+            this.setState({ model: 'error' });
+            const message = "Error: Pose detection stopped working. Reload the page.";
+            if (this.state.camera !== 'off') this.stopCamera(message);
+            else this.dom.setStatus(message);
+            return false;
         }
     }
 
@@ -288,6 +367,25 @@ export class AppEngine {
 
     hasLoopError() {
         return Object.keys(this.loopErrors).length > 0;
+    }
+}
+
+// Status message for a camera start failure, by error name.
+function cameraErrorMessage(err) {
+    switch (err && err.name) {
+        case 'NotAllowedError':
+        case 'SecurityError':
+            return "Error: Camera permission denied.";
+        case 'NotFoundError':
+            return "Error: No camera found.";
+        case 'NotReadableError':
+            return "Error: Camera is in use by another app.";
+        case 'OverconstrainedError':
+            return "Error: Camera doesn't support the requested settings.";
+        case 'TimeoutError':
+            return "Error: Camera did not start in time. Try again.";
+        default:
+            return "Error: Could not start the camera.";
     }
 }
 
