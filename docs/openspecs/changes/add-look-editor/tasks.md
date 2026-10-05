@@ -3,19 +3,20 @@
 See `design.md` for the model pose, the transform math and the data format.
 
 ## 1. Rig (pure logic)
-- [ ] 1.1 `js/config.js`: add `KP` name→index map, `MODEL_POSE` (design §1), `LOOKS` constants (line width,
-      storage key, max persons = `TRACKING.MAX_INSTANCES`).
-- [ ] 1.2 `js/logic/rig.js`: virtual points (`NECK`, `PELVIS`), `BONES` by name, `nearestBone(point)`,
+- [x] 1.1 `js/config.js`: add `KP` name→index map, `MODEL_POSE` (design §1), `LOOKS` constants (model size,
+      storage key, max persons = `TRACKING.MAX_INSTANCES`). No look line width: items use the render pass's width.
+- [x] 1.2 `js/logic/rig.js`: virtual points (`NECK`, `PELVIS`), `BONES` by name, `nearestBone(point)`,
       `boneMatrix(boneName, liveKeypoints)` → canvas matrix or `null` if not usable, and the handedness /
       reflection check.
-- [ ] 1.3 Verify in the browser console: with live keypoints = model pose, every bone matrix is identity. With the
-      model pose translated, scaled ×2 and rotated 90°, a mapped point lands where expected.
+- [x] 1.3 Verify (Node unit tests in `tests/rig.test.js`): with live keypoints = model pose, every bone matrix is
+      identity. With the model pose translated, scaled ×2 and rotated 90°, a mapped point lands where expected. A
+      mirrored pose is detected as reflected.
 
 ## 2. Looks and presets
-- [ ] 2.1 `js/ui/looks.js`: `tracePath` for each item type, `drawItem(ctx, item, matrixFor, color)`,
-      `drawLook(ctx, look, matrixFor, color)` (`matrixFor` = bone name → matrix, identity in the editor).
-- [ ] 2.2 Presets Classic, Glow Sticks, Party, EL Suit as data (with helpers for skeleton and outline strokes).
-- [ ] 2.3 Anchor caching: `bindItem(item)` sets `_bone` / `_bones` from model coordinates.
+- [x] 2.1 `js/ui/looks.js`: `tracePath` for each item type, `drawItem(ctx, item, matrixFor, color, style)`,
+      `drawLook(ctx, look, matrixFor, color, style)` (`matrixFor` = bone name → matrix, identity in the editor).
+- [x] 2.2 Presets Classic, Glow Sticks, Party, EL Suit as data (with helpers for skeleton and outline strokes).
+- [x] 2.3 Anchor caching: `bindItem(item)` sets `_bone` / `_bones` from model coordinates.
 
 ## 3. Live rendering
 - [ ] 3.1 `js/logic/tracker.js`: assign `slot` (lowest free 0–4) to new instances and keep it while tracked.
@@ -25,7 +26,7 @@ See `design.md` for the model pose, the transform math and the data format.
 - [ ] 3.3 Verify: with no saved looks, the live view looks like the current skeleton plus face ring.
 
 ## 4. Storage
-- [ ] 4.1 `js/services/storage.js`: `load()` → `persons[5]`, `save(persons)`, with try/catch and a fallback to all
+- [x] 4.1 `js/services/storage.js`: `load()` → `persons[5]`, `save(persons)`, with try/catch and a fallback to all
       `null` on missing or invalid data.
 
 ## 5. Editor

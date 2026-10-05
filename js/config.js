@@ -45,5 +45,35 @@ export const CONFIG = {
         [11, 12],                 // Hips
         [11, 13], [13, 15],       // Left leg
         [12, 14], [14, 16],       // Right leg
-    ]
+    ],
+    // Keypoint name -> index. 0-16 are MoveNet's COCO keypoints; NECK and PELVIS are virtual points (shoulder and
+    // hip midpoints) computed by js/logic/rig.js.
+    KP: {
+        NOSE: 0, L_EYE: 1, R_EYE: 2, L_EAR: 3, R_EAR: 4, L_SHOULDER: 5, R_SHOULDER: 6, L_ELBOW: 7, R_ELBOW: 8,
+        L_WRIST: 9, R_WRIST: 10, L_HIP: 11, R_HIP: 12, L_KNEE: 13, R_KNEE: 14, L_ANKLE: 15, R_ANKLE: 16,
+        NECK: 17, PELVIS: 18
+    },
+    // Reference body for looks (add-look-editor design §1): keypoints 0-16 in a 300 x 600 model space, front-facing
+    // and unmirrored (the person's left is on the image right). Arms are out in a wide A-pose (wider than the design's
+    // starting values) so wires offset from the upper arm and the torso side still anchor to their own bone.
+    MODEL_POSE: [
+        { x: 150, y: 70 },                       // NOSE
+        { x: 162, y: 58 }, { x: 138, y: 58 },    // eyes
+        { x: 178, y: 64 }, { x: 122, y: 64 },    // ears
+        { x: 195, y: 140 }, { x: 105, y: 140 },  // shoulders
+        { x: 245, y: 220 }, { x: 55, y: 220 },   // elbows
+        { x: 275, y: 300 }, { x: 25, y: 300 },   // wrists
+        { x: 178, y: 310 }, { x: 122, y: 310 },  // hips
+        { x: 182, y: 430 }, { x: 118, y: 430 },  // knees
+        { x: 185, y: 550 }, { x: 115, y: 550 }   // ankles
+    ],
+    LOOKS: {
+        MODEL_WIDTH: 300,
+        MODEL_HEIGHT: 600,
+        STORAGE_KEY: 'neonDance.looks.v1'
+        // MAX_PERSONS is set below from TRACKING.MAX_INSTANCES (one look slot per tracked person).
+        // Item line width isn't a constant here: items are stroked with the render pass's width (RENDER.LINE_WIDTH /
+        // RENDER.GLOW_LINE_WIDTH) so the glow halo keeps working.
+    }
 };
+CONFIG.LOOKS.MAX_PERSONS = CONFIG.TRACKING.MAX_INSTANCES;

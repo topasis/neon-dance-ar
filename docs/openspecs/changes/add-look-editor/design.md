@@ -8,20 +8,22 @@ arm bones and torso bones are far enough apart for nearest-bone anchoring.
 
 | # | Keypoint | x | y |   | # | Keypoint | x | y |
 |---|---|---|---|---|---|---|---|---|
-| 0 | NOSE | 150 | 70 | | 9 | L_WRIST | 235 | 315 |
-| 1 | L_EYE | 162 | 58 | | 10 | R_WRIST | 65 | 315 |
+| 0 | NOSE | 150 | 70 | | 9 | L_WRIST | 275 | 300 |
+| 1 | L_EYE | 162 | 58 | | 10 | R_WRIST | 25 | 300 |
 | 2 | R_EYE | 138 | 58 | | 11 | L_HIP | 178 | 310 |
 | 3 | L_EAR | 178 | 64 | | 12 | R_HIP | 122 | 310 |
 | 4 | R_EAR | 122 | 64 | | 13 | L_KNEE | 182 | 430 |
 | 5 | L_SHOULDER | 195 | 140 | | 14 | R_KNEE | 118 | 430 |
 | 6 | R_SHOULDER | 105 | 140 | | 15 | L_ANKLE | 185 | 550 |
-| 7 | L_ELBOW | 220 | 230 | | 16 | R_ANKLE | 115 | 550 |
-| 8 | R_ELBOW | 80 | 230 | | | | | |
+| 7 | L_ELBOW | 245 | 220 | | 16 | R_ANKLE | 115 | 550 |
+| 8 | R_ELBOW | 55 | 220 | | | | | |
 
 Virtual points, computed the same way for the model and live: `NECK` (17) = midpoint of the shoulders,
 `PELVIS` (18) = midpoint of the hips. A virtual point is confident only when both of its source points are.
 
-These numbers are starting values. Tune them so the figure looks right in the editor.
+These numbers are starting values. Tune them so the figure looks right in the editor. (Tuned in part A: the arms were
+widened from elbows 220/80, wrists 235/65 so EL Suit wires on the inner upper arm and outer torso anchor to their own
+bone. The `looks` unit tests check that every generated wire stays on one bone after any further tuning.)
 
 ## 2. Bones (anchor frames)
 
@@ -62,7 +64,13 @@ gets mirrored by change 5), a pure similarity transform puts offsets on the wron
 an arm outline ends up inside the arm. Compute the body's handedness as the sign of
 `cross(L_SHOULDER − R_SHOULDER, PELVIS − NECK)` for both the model and the live pose. If the signs differ, mirror
 each item across its bone axis in model space before applying `k` (equivalent: use `conj` on the offset relative
-to the bone line). If the torso isn't visible, assume no reflection.
+to the bone line). If the torso isn't visible, use the head instead: the sign of `cross(L_EYE − R_EYE, NOSE − R_EYE)`
+(otherwise close-up selfies on the mirrored front camera would get head items upside down). If neither is visible,
+assume no reflection.
+
+The mirrored case is still one affine matrix per bone: with `w = d / conj(d0)`, `p' = A + w·conj(p − A0)`, i.e.
+`(a, b, c, d) = (wr, wi, wi, −wr)`, where `wr = (d.x·d0.x − d.y·d0.y) / n` and `wi = (d.x·d0.y + d.y·d0.x) / n`.
+`js/logic/rig.js` computes all bone matrices once per person per frame (`Rig#update`) and items read them by name.
 
 ## 4. Data model
 
@@ -103,9 +111,15 @@ ctx.rotate(item.rotation);
 ctx.scale(item.scale, item.scale);
 ctx.beginPath(); tracePath(ctx, item);
 ctx.restore();                         // the path keeps its transformed coordinates
-ctx.lineWidth = CONFIG.LOOKS.LINE_WIDTH;  // so the line width stays in screen pixels
+ctx.lineWidth = style.lineWidth;        // the render pass's width, in that pass's pixels
 ctx.stroke();
 ```
+
+`drawLook(ctx, look, matrixFor, color, style)` / `drawItem(...)` take the render pass's `style` (`renderer.glowStyle`
+or `renderer.crispStyle`, `{ lineWidth, glow }`), because the glow pipeline (ADR 0002) draws everything twice: thick
+lines (`RENDER.GLOW_LINE_WIDTH`) on the downscaled glow layer and thin ones (`RENDER.LINE_WIDTH`) on the main canvas.
+A fixed look line width would remove the halo. The width isn't scaled per item or by bone length, the same as the
+old skeleton. Consecutive items of the same colour share one `stroke()` call.
 
 Base shapes: circle = ring r 20; rect = 40 × 26; triangle = equilateral, side 44; line = 50 long, horizontal;
 glasses = two rings r 10 at x ±13 plus a bridge; hat = fedora (brim line + crown trapezoid); smile = lower arc
@@ -114,8 +128,8 @@ r 18. Everything is stroked, never filled, so it looks like neon tubes.
 Strokes: map every point through **its own** bone's transform and draw one polyline. Start a new subpath whenever
 a point's bone isn't usable.
 
-Glow and blending are unchanged: color, `shadowColor`, `'lighter'` composite, and a reset to `'source-over'`
-after all people are drawn.
+Glow and blending are unchanged: the renderer's two passes (`renderGlowPass` / `renderCrispPass`, `'lighter'`
+composite inside `save`/`restore`) call `drawLook` once each per person.
 
 ## 6. Per-person slots and the default look
 
