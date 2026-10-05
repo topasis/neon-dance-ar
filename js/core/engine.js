@@ -187,6 +187,7 @@ export class AppEngine {
     startLoops() {
         this.loopGeneration++;
         this.latestInstances = [];
+        this.tracker.reset(); // people and filter state from a previous session must not match new people
         this.loopErrors = {};
         this.statusBeforeError = null;
         this.loopStats = { shownAt: performance.now(), render: newRate(), inference: newRate() };

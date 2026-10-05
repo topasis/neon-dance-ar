@@ -43,12 +43,12 @@ A new instance SHALL receive the first palette colour not used by any currently 
 - **THEN** all five colours are different
 
 ### Requirement: No frozen ghosts
-An unmatched instance SHALL remain available for re-matching for `GRACE_PERIOD_FRAMES` but SHALL only be drawn for
-`RENDER_GRACE_FRAMES`.
+An unmatched instance SHALL remain available for re-matching for `GRACE_PERIOD_MS` but SHALL only be drawn for
+`RENDER_GRACE_MS` (both measured with the estimate timestamps).
 
 #### Scenario: Person leaves the frame
 - **WHEN** a person walks out of view
-- **THEN** their skeleton disappears after at most `RENDER_GRACE_FRAMES` frames
+- **THEN** their skeleton disappears at the first estimate more than `RENDER_GRACE_MS` after they were last seen
 
 #### Scenario: One-frame dropout
 - **WHEN** a person is missed for one frame and detected again
