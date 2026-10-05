@@ -1,6 +1,6 @@
 # ADR 0002 — Glow rendering without per-stroke `shadowBlur`
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-05
 
 ## Context
@@ -24,7 +24,7 @@ Options considered:
 
 Replace per-stroke `shadowBlur` with a **downscaled glow layer**, still in Canvas 2D:
 
-1. Draw all skeletons with thicker lines into a small offscreen canvas (e.g. 1/4 of the output size).
+1. Draw all skeletons with thicker lines into a small offscreen canvas (e.g. 1/4 of the output size; shipped at 1/8 after tuning against the old look — fall back to 1/4 if the upscale looks blocky on iOS).
 2. Draw that canvas onto the main canvas scaled up, with `globalCompositeOperation = 'lighter'`. The browser's
    bilinear upscale softens it into a halo.
 3. Draw the crisp, thin skeleton lines on top with `'lighter'`, no shadow.

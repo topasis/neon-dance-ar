@@ -1,6 +1,6 @@
 # Tasks
 
-- [x] 1.1 Add `CONFIG.RENDER.GLOW_SCALE` and `GLOW_LINE_WIDTH`; remove `GLOW_BLUR`.
+- [x] 1.1 Add `CONFIG.RENDER.GLOW_SCALE` and `GLOW_LINE_WIDTH` (plus `GLOW_ALPHA` for halo strength); remove `GLOW_BLUR`.
 - [x] 1.2 Create the offscreen glow canvas in `Renderer` and resize it in `resize()`.
 - [x] 1.3 Refactor drawing so the bone/joint/decorator passes can target either context.
 - [x] 1.4 Implement glow pass → upscale composite → crisp pass.

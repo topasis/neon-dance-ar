@@ -8,7 +8,7 @@ frame with 5 people. Canvas shadow blur is a known slow path in WebKit and the c
 competing with inference for the 30 FPS budget on phones.
 
 ## What Changes
-- Add an offscreen glow canvas at `CONFIG.RENDER.GLOW_SCALE` (e.g. 0.25) of the output size.
+- Add an offscreen glow canvas at `CONFIG.RENDER.GLOW_SCALE` (e.g. 0.25) of the output size. Tuned to 0.125 with `GLOW_LINE_WIDTH` 12 and a new `GLOW_ALPHA` 0.3 to match the old halo; 0.25 is the fallback if iOS shows blockiness.
 - Per frame: clear the glow canvas → draw all visible skeletons (bones + joints, decorators too) with
   `GLOW_LINE_WIDTH` (scaled) → draw the glow canvas onto the main canvas upscaled with `'lighter'` (with
   `imageSmoothingEnabled = true`) → draw the crisp skeletons on top with `'lighter'`, `LINE_WIDTH`, no shadow.

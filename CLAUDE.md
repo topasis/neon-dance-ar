@@ -168,7 +168,7 @@ For the glow effect:
 - Glow pass: clear an offscreen canvas at `GLOW_SCALE` (e.g. 0.125) of the output size, apply a matching scale
   transform, and draw the skeletons there with `globalCompositeOperation = "lighter"` and `lineWidth = GLOW_LINE_WIDTH`.
 - Draw that canvas onto `ctx` upscaled to the full size, with `"lighter"`, `globalAlpha = GLOW_ALPHA` and
-  `imageSmoothingEnabled = true` (the upscale softens it into a halo). Don't use `shadowBlur` or `ctx.filter`.
+  `imageSmoothingEnabled = true` and `imageSmoothingQuality = 'high'` (the upscale softens it into a halo). Don't use `shadowBlur` or `ctx.filter`.
 - Crisp pass: set `ctx.globalCompositeOperation = "lighter"`, `ctx.lineWidth = 3` and `ctx.strokeStyle = instanceColor`.
 - Draw the bones (lines) and joints (circles). Skip keypoints with a confidence score `< 0.3`.
 - Reset `globalCompositeOperation = "source-over"` after drawing skeletons.
