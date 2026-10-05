@@ -5,6 +5,8 @@ export class DOMManager {
         this.btnMusic = document.getElementById('btn-music');
         this.btnRecord = document.getElementById('btn-record');
         this.btnShare = document.getElementById('btn-share');
+        this.btnCustomize = document.getElementById('btn-customize');
+        this.editor = document.getElementById('editor');
         this.statusText = document.getElementById('status');
         this.video = document.getElementById('video');
         this.canvas = document.getElementById('output-canvas');
@@ -49,6 +51,10 @@ export class DOMManager {
         this.btnRecord.disabled = !cameraOn || state.recording === 'stopping';
 
         this.btnShare.hidden = !state.recordingReady;
+
+        // Looks can't be edited during a take (the editor would cover what is being recorded).
+        this.btnCustomize.disabled = state.recording !== 'off';
+        this.btnCustomize.classList.toggle('active', state.editorOpen);
     }
 
     onCameraToggle(callback) { this.btnCamera.addEventListener('click', callback); }
@@ -56,4 +62,5 @@ export class DOMManager {
     onMusicToggle(callback) { this.btnMusic.addEventListener('click', callback); }
     onRecordToggle(callback) { this.btnRecord.addEventListener('click', callback); }
     onSaveRecording(callback) { this.btnShare.addEventListener('click', callback); }
+    onCustomize(callback) { this.btnCustomize.addEventListener('click', callback); }
 }

@@ -18,6 +18,7 @@
             <button id="btn-camera">Start Camera</button>
             <button id="btn-background">Background: Live</button>
             <button id="btn-music">Play Music</button>
+            <button id="btn-customize" aria-haspopup="dialog">Customize Looks</button>
             <button id="btn-record" disabled>Start Recording</button>
             <button id="btn-share" hidden>Save / Share</button>
         </div>
@@ -28,6 +29,56 @@
         <video id="video" playsinline muted style="display: none;"></video>
         <canvas id="output-canvas"></canvas>
     </div>
+
+    <!-- Body look editor (js/ui/editor.js) -->
+    <dialog id="editor" aria-labelledby="editor-title">
+        <div class="editor-top">
+            <div class="editor-row">
+                <h2 id="editor-title">Looks</h2>
+                <div class="editor-row" role="group" aria-label="Person">
+                    <span aria-hidden="true">Person</span>
+                    <button type="button" data-slot="0" aria-pressed="true" aria-label="Person 1">1</button>
+                    <button type="button" data-slot="1" aria-pressed="false" aria-label="Person 2">2</button>
+                    <button type="button" data-slot="2" aria-pressed="false" aria-label="Person 3">3</button>
+                    <button type="button" data-slot="3" aria-pressed="false" aria-label="Person 4">4</button>
+                    <button type="button" data-slot="4" aria-pressed="false" aria-label="Person 5">5</button>
+                </div>
+                <button type="button" id="editor-done" class="active">Done</button>
+            </div>
+            <div class="editor-row" role="group" aria-label="Tool">
+                <button type="button" data-tool="select" aria-pressed="true">Select</button>
+                <button type="button" data-tool="pen" aria-pressed="false">Pen</button>
+                <button type="button" data-tool="circle" aria-pressed="false">Circle</button>
+                <button type="button" data-tool="rect" aria-pressed="false">Rect</button>
+                <button type="button" data-tool="triangle" aria-pressed="false">Triangle</button>
+                <button type="button" data-tool="line" aria-pressed="false">Line</button>
+                <button type="button" data-tool="glasses" aria-pressed="false">Glasses</button>
+                <button type="button" data-tool="hat" aria-pressed="false">Hat</button>
+                <button type="button" data-tool="smile" aria-pressed="false">Smile</button>
+            </div>
+        </div>
+        <div class="editor-stage">
+            <canvas id="editor-canvas" role="img" aria-label="Model body: tap to place the chosen shape, draw with Pen, or select and drag items"></canvas>
+        </div>
+        <div class="editor-bottom">
+            <p id="editor-look-name" aria-live="polite"></p>
+            <div class="editor-row">
+                <label>Color <input type="color" id="editor-color" value="#00ffff"></label>
+                <label><input type="checkbox" id="editor-person-color" checked> Person color</label>
+                <button type="button" id="editor-delete">Delete</button>
+            </div>
+            <div class="editor-row">
+                <label>Scale <input type="range" id="editor-scale" min="0.1" max="5" step="0.05" value="1"></label>
+                <label>Rotate <input type="range" id="editor-rotate" min="-180" max="180" step="1" value="0"></label>
+            </div>
+            <div class="editor-row">
+                <label>Preset <select id="editor-preset"></select></label>
+                <button type="button" id="editor-load">Load</button>
+                <button type="button" id="editor-clear">Clear</button>
+                <button type="button" id="editor-default">Use default</button>
+            </div>
+        </div>
+    </dialog>
 
     <!-- Hidden audio element for music -->
     <audio id="bg-music" src="assets/music.mp3" loop crossorigin="anonymous"></audio>

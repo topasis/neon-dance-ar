@@ -93,3 +93,107 @@ canvas {
     border-radius: 8px;
     box-shadow: 0 0 20px rgba(0,255,255,0.1);
 }
+
+/* Body look editor: full-screen modal. Portrait: tools above the model, item controls below; short landscape
+   screens put the model on the left. */
+#editor {
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    margin: 0;
+    padding: 8px;
+    box-sizing: border-box;
+    border: 0;
+    background: #111;
+    color: white;
+    gap: 6px;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas: "top" "stage" "bottom";
+}
+
+#editor[open] {
+    display: grid;
+}
+
+#editor h2 {
+    margin: 0 4px 0 0;
+    font-size: 18px;
+    color: #0ff;
+    text-shadow: 0 0 8px #0ff;
+}
+
+#editor button {
+    padding: 6px 10px;
+}
+
+#editor button[aria-pressed="true"] {
+    background: #0ff;
+    color: black;
+    border-color: #0ff;
+}
+
+.editor-top { grid-area: top; }
+.editor-bottom { grid-area: bottom; }
+
+.editor-top, .editor-bottom {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.editor-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 6px 8px;
+    font-size: 14px;
+}
+
+.editor-row label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+#editor-scale, #editor-rotate {
+    width: 100px;
+}
+
+#editor-look-name {
+    margin: 0;
+    text-align: center;
+    font-size: 13px;
+    color: #aaa;
+}
+
+.editor-stage {
+    grid-area: stage;
+    min-height: 0;
+    min-width: 0;
+    container-type: size;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Model canvas: 1:2, as large as the stage allows. No border or padding: pointer mapping uses its bounding box. */
+#editor-canvas {
+    height: min(100cqh, 200cqw);
+    width: auto;
+    aspect-ratio: 1 / 2;
+    max-width: none;
+    border: 0;
+    touch-action: none;
+}
+
+@media (orientation: landscape) and (max-height: 600px) {
+    #editor {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+        grid-template-rows: auto minmax(0, 1fr);
+        grid-template-areas: "stage top" "stage bottom";
+        overflow: auto;
+    }
+}
