@@ -19,6 +19,7 @@ export const CONFIG = {
         MIN_INSTANCE_SCORE: 0.2,
         MAX_INSTANCES: 5,
         MAX_DISTANCE_RATIO: 0.5, // max bbox-centre movement between estimates, relative to the person's bbox diagonal
+        MIN_MATCH_DIAG_PX: 40,   // floor for that diagonal (video px), so a pose with 1-2 confident keypoints can re-match
         GRACE_PERIOD_MS: 1000,   // an unseen person can still be re-matched (same ID and colour) for this long
         RENDER_GRACE_MS: 150     // ...but is only drawn for this long; hides a missed estimate without frozen ghosts
     },

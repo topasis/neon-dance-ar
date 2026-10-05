@@ -22,7 +22,7 @@ export class OneEuroFilter {
         }
 
         const dt = t - this.tPrev;
-        if (dt <= 0) return x;
+        if (dt <= 0) return this.xPrev; // same or older timestamp: keep the last output and state
 
         const dx = (x - this.xPrev) / dt;
         const alphaD = this.alpha(this.dCutoff, dt);

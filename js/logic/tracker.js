@@ -17,7 +17,7 @@ export class InstanceTracker {
     // timestampMs is when the poses were estimated (captured before inference started).
     // Returns the instances to draw: those seen within the last RENDER_GRACE_MS.
     update(detectedPoses, timestampMs) {
-        const { MAX_DISTANCE_RATIO, GRACE_PERIOD_MS, RENDER_GRACE_MS } = CONFIG.TRACKING;
+        const { MAX_DISTANCE_RATIO, MIN_MATCH_DIAG_PX, GRACE_PERIOD_MS, RENDER_GRACE_MS } = CONFIG.TRACKING;
 
         // Poses without a confident keypoint have no position to match on.
         const poses = [];
@@ -31,7 +31,8 @@ export class InstanceTracker {
         this.instances.forEach((inst, i) => {
             poses.forEach(({ bbox }, j) => {
                 const dist = Math.hypot(bbox.cx - inst.bbox.cx, bbox.cy - inst.bbox.cy);
-                if (dist <= MAX_DISTANCE_RATIO * Math.max(inst.bbox.diag, bbox.diag)) pairs.push({ i, j, dist });
+                const diag = Math.max(inst.bbox.diag, bbox.diag, MIN_MATCH_DIAG_PX);
+                if (dist <= MAX_DISTANCE_RATIO * diag) pairs.push({ i, j, dist });
             });
         });
         pairs.sort((a, b) => a.dist - b.dist);

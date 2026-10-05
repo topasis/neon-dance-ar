@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { InstanceTracker } from '../js/logic/tracker.js';
 import { CONFIG } from '../js/config.js';
 
-const { RENDER_GRACE_MS, GRACE_PERIOD_MS } = CONFIG.TRACKING;
+const { RENDER_GRACE_MS, GRACE_PERIOD_MS, MAX_DISTANCE_RATIO, MIN_MATCH_DIAG_PX } = CONFIG.TRACKING;
 const DT = 40; // ms between estimates (25 Hz)
 
 // A 17-keypoint pose filling a w x h box centred on (cx, cy): columns at -w/2, 0, +w/2 and six rows from -h/2 to +h/2.
@@ -170,6 +170,20 @@ test('the matching distance scales with person size, not resolution', () => {
     tracker.update([pose(200, 240, 30, 70)], 0);
     const out = tracker.update([pose(330, 240, 30, 70)], DT);
     assert.deepEqual(ids(out).sort(), [0, 1]);
+});
+
+test('a pose with a single confident keypoint can still re-match (diagonal floor)', () => {
+    const tracker = new InstanceTracker();
+    const single = (x, y) => {
+        const p = pose(320, 240, 150, 350, 0.1);
+        p.keypoints[10] = { x, y, score: 0.9 };
+        return p;
+    };
+    tracker.update([single(100, 200)], 0);
+    const step = (MAX_DISTANCE_RATIO * MIN_MATCH_DIAG_PX) - 1;
+    assert.deepEqual(ids(tracker.update([single(100 + step, 200)], DT)), [0], 'moved within the floor threshold');
+    const out = tracker.update([single(100 + step + MAX_DISTANCE_RATIO * MIN_MATCH_DIAG_PX + 5, 200)], 2 * DT);
+    assert.deepEqual(ids(out).sort(), [0, 1], 'a jump beyond the floor threshold is a new person');
 });
 
 test('the same poses and timestamps give identical results', () => {

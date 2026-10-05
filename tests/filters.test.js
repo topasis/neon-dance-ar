@@ -32,10 +32,11 @@ test('the same inputs and timestamps give the same outputs', () => {
     [3, 8, 2, 15, 15, 40, 38].forEach((x, i) => assert.equal(a.filter(x, i * 0.04), b.filter(x, i * 0.04)));
 });
 
-test('a non-increasing timestamp returns the raw value and keeps the state', () => {
+test('a non-increasing timestamp returns the previous output and keeps the state', () => {
     const f = new OneEuroFilter();
     f.filter(0, 1);
-    assert.equal(f.filter(50, 1), 50);
+    assert.equal(f.filter(50, 1), 0);
+    assert.equal(f.filter(50, 0.5), 0);
     assert.equal(f.xPrev, 0);
     assert.equal(f.tPrev, 1);
 });

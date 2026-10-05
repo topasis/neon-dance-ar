@@ -9,8 +9,10 @@ the pose-detection library's built-in smoothing and tracking SHALL be disabled.
 - **THEN** `enableSmoothing` and `enableTracking` are `false`
 
 ### Requirement: Global nearest-first matching
-Each frame, the tracker SHALL match detections to existing instances by ascending distance across all pairs,
-within a threshold relative to the instance's bounding-box size.
+Each estimate, the tracker SHALL match detections to existing instances by ascending distance across all pairs.
+A pair SHALL only match if the distance between their bounding-box centres is at most
+`MAX_DISTANCE_RATIO × max(instance diagonal, detection diagonal, MIN_MATCH_DIAG_PX)`, where the diagonals are those
+of the confident keypoints' bounding boxes.
 
 #### Scenario: Two people cross
 - **WHEN** person A and person B walk past each other

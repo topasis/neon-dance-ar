@@ -12,6 +12,8 @@
 - [x] 1.5 Replace `CONFIG.TRACKING.MAX_DISTANCE_PX` with `MAX_DISTANCE_RATIO` (relative to the instance's bbox diagonal).
       Implemented relative to the larger diagonal of the instance and the detection (0.5), so a person who has just
       entered (partial, small bbox) can still be matched as more of them becomes visible.
+      The diagonal has a floor, `MIN_MATCH_DIAG_PX` (40 video px, roughly a head at dancing distance at 640×480), so a
+      pose with one or two confident keypoints (diagonal ~0) can still re-match.
 - [x] 1.6 Implement global nearest-first matching.
 - [x] 1.7 Implement lowest-free-palette-index colour assignment.
       `lowestFreeIndex(key, count, t)` is generic, so `add-look-editor` 3.1 can reuse it for `slot`. Not the same
