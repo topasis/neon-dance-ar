@@ -39,7 +39,10 @@ export class RecorderService {
                 const type = mediaRecorder.mimeType || mimeType || 'video/webm';
                 const blob = new Blob(chunks, { type });
                 if (blob.size === 0) {
-                    reject(new Error("Recording is empty."));
+                    // E.g. a very quick Start/Stop tap: nothing was encoded yet.
+                    const err = new Error("Recording is empty.");
+                    err.name = 'EmptyRecordingError';
+                    reject(err);
                     return;
                 }
                 const extension = EXTENSIONS[type.split(';')[0].trim()] || 'webm';

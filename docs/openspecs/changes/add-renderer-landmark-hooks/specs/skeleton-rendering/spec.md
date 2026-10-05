@@ -16,9 +16,15 @@ drawing for that keypoint on every instance.
 - **THEN** the default joint circle is drawn again
 
 ### Requirement: Instance decorators
+> **Superseded by `add-look-editor` (11):** decorators were removed. Each person is drawn with a look; the face
+> circle is the head ring of the Classic preset.
+
 The renderer SHALL call each registered decorator once per visible instance after bones and joints.
 
 #### Scenario: Face circle as decorator
+> **Superseded by `add-look-editor` (11):** the face circle is drawn as the Classic preset's head ring, not by a
+> decorator.
+
 - **WHEN** the app starts
 - **THEN** the face circle is drawn through a registered decorator and looks the same as before the change
 

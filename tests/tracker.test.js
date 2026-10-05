@@ -237,3 +237,34 @@ test('with all five slots held, a new person takes the slot of someone who left 
     assert.equal(out.find(i => i.bbox.cy === 2000).slot, 2);
     assert.deepEqual(out.map(i => i.slot).sort(), [0, 1, 2, 3, 4]);
 });
+
+test('a returning person whose slot was given away gets the lowest free slot (unique on screen)', () => {
+    const tracker = new InstanceTracker();
+    const people = [0, 1, 2, 3, 4].map(i => pose(100 + 250 * i, 240));
+    tracker.update(people, 0); // slots 0-4
+    // The person in slot 2 leaves; past the render grace a new person appears and takes slot 2.
+    const newcomer = pose(600, 2000);
+    tracker.update(people.filter((_, i) => i !== 2), DT);
+    let t = DT + RENDER_GRACE_MS + 1;
+    let out = tracker.update([...people.filter((_, i) => i !== 2), newcomer], t);
+    assert.equal(out.find(i => i.bbox.cy === 2000).slot, 2);
+    // The person in slot 4 leaves too; then the slot-2 person comes back within the grace period.
+    const stay = [people[0], people[1], people[3], newcomer];
+    tracker.update(stay, t += DT);
+    out = tracker.update([...stay, people[2]], t += RENDER_GRACE_MS + 1);
+    assert.ok(t < GRACE_PERIOD_MS);
+    const back = out.find(i => i.bbox.cx === 600 && i.bbox.cy === 240);
+    assert.equal(back.id, 2, 're-matched, not a new instance');
+    assert.equal(back.slot, 4, 'slot 2 is held by the newcomer; 4 is the lowest slot free on screen');
+    assert.equal(out.find(i => i.bbox.cy === 2000).slot, 2, 'the newcomer keeps its slot');
+    assert.deepEqual(out.map(i => i.slot).sort(), [0, 1, 2, 3, 4]);
+});
+
+test('a returning person whose slot is still free keeps it', () => {
+    const tracker = new InstanceTracker();
+    const people = [pose(100, 240), pose(500, 240)];
+    tracker.update(people, 0);
+    tracker.update([people[0]], DT);
+    const out = tracker.update(people, DT + RENDER_GRACE_MS + 1);
+    assert.deepEqual(out.map(i => [i.id, i.slot, i.colorIndex]), [[0, 0, 0], [1, 1, 1]]);
+});

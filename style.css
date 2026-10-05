@@ -98,9 +98,12 @@ canvas {
    screens put the model on the left. */
 #editor {
     width: 100%;
+    /* dvh: Safari's toolbar must not cover the bottom controls; % for browsers without dvh. */
     height: 100%;
+    height: 100dvh;
     max-width: 100%;
     max-height: 100%;
+    max-height: 100dvh;
     margin: 0;
     padding: 8px;
     box-sizing: border-box;
@@ -179,9 +182,12 @@ canvas {
     align-items: center;
 }
 
-/* Model canvas: 1:2, as large as the stage allows. No border or padding: pointer mapping uses its bounding box. */
+/* Model canvas: 1:2, as large as the stage allows. No border or padding: pointer mapping uses its bounding box.
+   Without container query units (iOS 15.4-15.x) the min() rule is dropped: 60vh, capped at the stage height. */
 #editor-canvas {
+    height: 60vh;
     height: min(100cqh, 200cqw);
+    max-height: 100%;
     width: auto;
     aspect-ratio: 1 / 2;
     max-width: none;

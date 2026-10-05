@@ -1,6 +1,7 @@
 // Body look editor (add-look-editor design §8): a modal <dialog> showing the model pose, where the user places shapes,
 // draws freehand strokes and edits the items of each person slot's look. Edits change the shared `persons` array in
-// place (the live renderer reads the same array) and are saved after every change.
+// place (the live renderer reads the same array) and are saved after every change (sliders and the colour picker:
+// when the value is committed, not on every input tick).
 //
 // API
 //   new LookEditor(root, persons)   root = the #editor <dialog>; persons = the engine's slot looks (Look | null each)
@@ -39,6 +40,7 @@ export class LookEditor {
         this.selected = null;
         this.drag = null; // { id: pointerId, last: {x, y}, moved } or { id, pen: [{x, y}] }
         this.returnFocus = null;
+        this.unsaved = false; // a slider / colour edit not saved yet
         this.onClose = null;
         for (const [key, look] of Object.entries(PRESETS)) this.el.preset.add(new Option(look.name, key));
         this.bindEvents();
@@ -67,6 +69,9 @@ export class LookEditor {
         const on = (el, type, fn) => el.addEventListener(type, fn);
         const { el } = this;
         on(this.root, 'close', () => {
+            // Closed mid-drag (Escape or Done): the item was already moved in `persons`, so keep and save the move.
+            if (this.drag?.moved) this.commit(this.selected);
+            else if (this.unsaved) this.persist();
             this.drag = null;
             this.returnFocus?.focus();
             this.onClose?.();
@@ -91,15 +96,19 @@ export class LookEditor {
         on(this.canvas, 'pointerup', (e) => this.pointerUp(e));
         on(this.canvas, 'pointercancel', (e) => this.pointerUp(e));
 
+        // Sliders and the colour picker redraw on every input tick and save once the value is committed.
         on(el.color, 'input', () => {
             el.personColor.checked = false;
-            this.editSelected(item => { item.color = el.color.value; });
+            this.editSelected(item => { item.color = el.color.value; }, false);
         });
         on(el.personColor, 'change', () => this.editSelected(item => {
             item.color = el.personColor.checked ? null : el.color.value;
         }));
-        on(el.scale, 'input', () => this.editSelected(item => { item.scale = Number(el.scale.value); }));
-        on(el.rotate, 'input', () => this.editSelected(item => { item.rotation = Number(el.rotate.value) * Math.PI / 180; }));
+        on(el.scale, 'input', () => this.editSelected(item => { item.scale = Number(el.scale.value); }, false));
+        on(el.rotate, 'input', () => this.editSelected(item => { item.rotation = Number(el.rotate.value) * Math.PI / 180; }, false));
+        [el.color, el.scale, el.rotate].forEach(input => on(input, 'change', () => {
+            if (this.unsaved) this.persist();
+        }));
         on(el.del, 'click', () => this.deleteSelected());
         on(this.root.querySelector('#editor-load'), 'click', () => this.setLook(copyLook(PRESETS[el.preset.value])));
         on(this.root.querySelector('#editor-clear'), 'click', () => this.setLook({ name: 'Custom', items: [] }));
@@ -128,11 +137,11 @@ export class LookEditor {
         return look;
     }
 
-    editSelected(change) {
+    editSelected(change, persist = true) {
         if (!this.selected) return;
         this.ensureCustom();
         change(this.selected);
-        this.commit(this.selected);
+        this.commit(this.selected, persist);
     }
 
     deleteSelected() {
@@ -143,11 +152,17 @@ export class LookEditor {
         this.commit();
     }
 
-    // Re-anchors the edited item, saves every slot and redraws.
-    commit(item = null) {
+    // Re-anchors the edited item, saves every slot (unless persist is false) and redraws.
+    commit(item = null, persist = true) {
         if (item) bindItem(item);
-        save(this.persons);
+        if (persist) this.persist();
+        else this.unsaved = true;
         this.render();
+    }
+
+    persist() {
+        save(this.persons);
+        this.unsaved = false;
     }
 
     newItemColor() {

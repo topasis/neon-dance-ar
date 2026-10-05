@@ -39,21 +39,34 @@ export class InstanceTracker {
 
         const instMatched = new Array(this.instances.length).fill(false);
         const poseMatched = new Array(poses.length).fill(false);
+        const returned = []; // re-matched instances that were past the render grace (not drawn) until now
         for (const { i, j } of pairs) {
             if (instMatched[i] || poseMatched[j]) continue;
             instMatched[i] = poseMatched[j] = true;
-            this.applyPose(this.instances[i], poses[j], timestampMs);
+            const inst = this.instances[i];
+            if (timestampMs - inst.lastSeen > RENDER_GRACE_MS) returned.push(inst);
+            this.applyPose(inst, poses[j], timestampMs);
         }
 
         // Unmatched instances stay available for re-matching during the grace period.
         this.instances = this.instances.filter((inst, i) => instMatched[i] || timestampMs - inst.lastSeen < GRACE_PERIOD_MS);
+
+        // While a returning person was not drawn, a new person may have been given their colour or slot (see
+        // lowestFreeIndex). If someone on screen still holds it, the returning person gets the lowest free one.
+        for (const inst of returned) {
+            for (const [key, count] of [['colorIndex', CONFIG.NEON_COLORS.length], ['slot', CONFIG.TRACKING.MAX_INSTANCES]]) {
+                const taken = this.instances.some(other => other !== inst && other[key] === inst[key]
+                    && timestampMs - other.lastSeen <= RENDER_GRACE_MS);
+                if (taken) inst[key] = this.lowestFreeIndex(key, count, timestampMs);
+            }
+        }
 
         poses.forEach((p, j) => {
             if (poseMatched[j]) return;
             const inst = {
                 id: this.nextId++,
                 colorIndex: this.lowestFreeIndex('colorIndex', CONFIG.NEON_COLORS.length, timestampMs),
-                // Look slot (Person N = slot N-1), kept while tracked.
+                // Look slot (Person N = slot N-1), kept while tracked unless reassigned on return (above).
                 slot: this.lowestFreeIndex('slot', CONFIG.TRACKING.MAX_INSTANCES, timestampMs),
                 filters: p.pose.keypoints.map(() => ({ x: new OneEuroFilter(), y: new OneEuroFilter() })),
                 keypoints: null
@@ -83,7 +96,8 @@ export class InstanceTracker {
 
     // Lowest index in [0, count) that no tracked instance uses for `key` (colorIndex or slot). If all are taken (more
     // tracked instances than indices, i.e. out-of-view instances in their grace period), the lowest index unused by
-    // the visible ones, so colours and slots of people on screen stay unique.
+    // the visible ones. Together with the re-match check in update(), colours and slots of people on screen stay
+    // unique as long as at most `count` people are on screen (MAX_INSTANCES for slots).
     lowestFreeIndex(key, count, timestampMs) {
         const free = (insts) => {
             const used = new Set(insts.map(inst => inst[key]));

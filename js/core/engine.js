@@ -268,9 +268,13 @@ export class AppEngine {
             this.setState({ recording: 'off', recordingReady: true });
             this.dom.setStatus(`${this.recordingStopReason}Recording ready. Tap Save / Share.`);
         } catch (err) {
-            console.error("Recording error:", err);
             this.setState({ recording: 'off' });
-            this.dom.setStatus(`${this.recordingStopReason}Error: Recording failed.`);
+            if (err.name === 'EmptyRecordingError') {
+                this.dom.setStatus(`${this.recordingStopReason}Recording too short.`);
+            } else {
+                console.error("Recording error:", err);
+                this.dom.setStatus(`${this.recordingStopReason}Error: Recording failed.`);
+            }
         }
         // Apply a video size change that happened during the take.
         this.handleVideoResize();
