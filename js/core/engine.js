@@ -6,6 +6,8 @@ import { CameraService } from '../services/camera.js';
 import { AudioService } from '../services/audio.js';
 import { RecorderService } from '../services/recorder.js';
 import { InstanceTracker } from '../logic/tracker.js';
+import { LookEditor } from '../ui/editor.js';
+import { load } from '../services/storage.js'; // TEMP until part B merge
 
 export class AppEngine {
     constructor() {
@@ -17,6 +19,9 @@ export class AppEngine {
         this.audio = new AudioService(this.dom.audioEl);
         this.recorder = new RecorderService();
         this.tracker = new InstanceTracker();
+        this.persons ??= load(); // TEMP until part B merge
+        // Edits the shared per-person looks in place; the camera and loops keep running behind it.
+        this.editor = new LookEditor(this.dom.editor, this.persons);
 
         // Single source of truth for app state; the UI is rendered from it via dom.render().
         this.state = {
@@ -25,7 +30,8 @@ export class AppEngine {
             recording: 'off',      // 'off' | 'on' | 'stopping'
             recordingReady: false, // a finished take can be saved / shared
             music: false,
-            showCameraFeed: true
+            showCameraFeed: true,
+            editorOpen: false
         };
         this.lastRecording = null; // { blob, filename } of the last finished take
         this.sharing = false;      // a Save / Share is in progress; further taps are ignored
@@ -74,6 +80,8 @@ export class AppEngine {
         this.dom.onMusicToggle(() => this.toggleMusic());
         this.dom.onRecordToggle(() => this.toggleRecording());
         this.dom.onSaveRecording(() => this.saveRecording());
+        this.dom.onCustomize(() => this.openEditor());
+        this.editor.onClose = () => this.setState({ editorOpen: false });
         this.camera.onEnded = () => this.handleCameraEnded();
         // The video size changes when the phone rotates; keep the canvas (and recording) at the video's size.
         this.dom.video.addEventListener('resize', () => this.handleVideoResize());
@@ -196,6 +204,13 @@ export class AppEngine {
             this.dom.setStatus("Running pose estimation...");
         }
         this.startLoops();
+    }
+
+    // Not during a take; Done / Escape close it (editor.onClose).
+    openEditor() {
+        if (this.state.recording !== 'off' || this.state.editorOpen) return;
+        this.editor.open();
+        this.setState({ editorOpen: true });
     }
 
     toggleBackground() {

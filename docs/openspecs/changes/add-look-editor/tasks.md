@@ -30,11 +30,11 @@ See `design.md` for the model pose, the transform math and the data format.
       `null` on missing or invalid data.
 
 ## 5. Editor
-- [ ] 5.1 `index.html` / `style.css`: **Customize Looks** button and the `#editor` overlay (design §8). It must fit
+- [x] 5.1 `index.html` / `style.css`: **Customize Looks** button and the `#editor` overlay (design §8). It must fit
       a phone screen in portrait (canvas scales down, controls wrap).
-- [ ] 5.2 `js/ui/editor.js`: model canvas (silhouette + landmark dots), person tabs, tools (select, pen, 7 shapes),
+- [x] 5.2 `js/ui/editor.js`: model canvas (silhouette + landmark dots), person tabs, tools (select, pen, 7 shapes),
       scale/rotate/color/delete, preset load, clear, use default, save on every change.
-- [ ] 5.3 `js/ui/dom.js` + `js/core/engine.js`: open and close the editor; the renderer reads the current
+- [x] 5.3 `js/ui/dom.js` + `js/core/engine.js`: open and close the editor; the renderer reads the current
       `persons` array.
 
 ## 6. Docs
