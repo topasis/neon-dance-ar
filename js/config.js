@@ -2,7 +2,8 @@ export const CONFIG = {
     CAMERA: {
         WIDTH: 640,
         HEIGHT: 480,
-        FPS: 30
+        FPS: 30,
+        MIRROR_FRONT: true    // draw the user-facing camera mirrored (video and skeletons, so recordings too)
     },
     RENDER: {
         GLOW_BLUR: 15,

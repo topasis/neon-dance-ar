@@ -1,6 +1,6 @@
 import { CONFIG } from '../config.js';
 import { DOMManager } from '../ui/dom.js';
-import { Renderer } from '../ui/renderer.js';
+import { Renderer, drawFaceCircle } from '../ui/renderer.js';
 import { PoseDetector } from '../services/ml.js';
 import { CameraService } from '../services/camera.js';
 import { AudioService } from '../services/audio.js';
@@ -11,6 +11,7 @@ export class AppEngine {
     constructor() {
         this.dom = new DOMManager();
         this.renderer = new Renderer(this.dom.canvas);
+        this.renderer.addDecorator(drawFaceCircle);
         this.detector = new PoseDetector();
         this.camera = new CameraService(this.dom.video, CONFIG.CAMERA.WIDTH, CONFIG.CAMERA.HEIGHT);
         this.audio = new AudioService(this.dom.audioEl);
@@ -259,6 +260,7 @@ export class AppEngine {
         if (generation !== this.loopGeneration) return;
 
         try {
+            this.renderer.updateMapping(this.dom.video);
             this.renderer.renderBackground(this.dom.video, this.state.showCameraFeed);
             this.renderer.renderSkeletons(this.latestInstances);
             tickRate(this.loopStats.render);
