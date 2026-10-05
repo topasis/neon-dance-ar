@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BONE_NAMES, identityMatrixFor } from '../js/logic/rig.js';
+import { CONFIG } from '../js/config.js';
+import { BONES, BONE_NAMES, Rig, identityMatrixFor } from '../js/logic/rig.js';
 import {
-    PRESETS, ITEM_TYPES, SHAPE_TYPES, bindItem, copyLook, createItem, drawLook, sanitizeLook, tracePath
+    PRESETS, ITEM_TYPES, SHAPE_TYPES, anchorBones, bindItem, copyLook, createItem, drawLook, sanitizeLook, tracePath
 } from '../js/ui/looks.js';
 
 // Records path calls with the current transform applied (translate/rotate/scale/transform; save/restore).
@@ -43,14 +44,14 @@ test('presets use only known item types and valid bones, colours and ids', () =>
         for (const item of look.items) {
             assert.ok(ITEM_TYPES.includes(item.type), `${key}: ${item.type}`);
             assert.ok(item.color === null || COLOR_RE.test(item.color), `${key}: colour ${item.color}`);
-            if (item.type === 'stroke') {
-                assert.ok(item.points.length >= 2, `${key}: stroke points`);
-                assert.equal(item._bones.length, item.points.length);
-                item._bones.forEach(b => assert.ok(BONE_NAMES.includes(b), `${key}: bone ${b}`));
-            } else {
-                assert.ok(BONE_NAMES.includes(item._bone), `${key}: bone ${item._bone}`);
-                assert.ok(item.scale > 0);
+            const anchors = anchorBones(item);
+            assert.equal(anchors.length, item.type === 'stroke' ? item.points.length : 1, `${key}: anchor count`);
+            for (const cands of anchors) {
+                assert.ok(cands.length > 0, `${key}: no candidate bone`);
+                cands.forEach(b => assert.ok(BONE_NAMES.includes(b), `${key}: bone ${b}`));
             }
+            if (item.type === 'stroke') assert.ok(item.points.length >= 2, `${key}: stroke points`);
+            else assert.ok(item.scale > 0);
         }
     }
 });
@@ -58,7 +59,8 @@ test('presets use only known item types and valid bones, colours and ids', () =>
 test('generated sticks and wires anchor every point to the bone they follow', () => {
     for (const key of ['glowSticks', 'elSuit']) {
         for (const item of PRESETS[key].items.filter(i => i.type === 'stroke')) {
-            assert.equal(new Set(item._bones).size, 1, `${key}: ${item._bones}`);
+            const anchors = anchorBones(item);
+            assert.ok(anchors.every(c => c.length === 1 && c[0] === anchors[0][0]), `${key}: ${JSON.stringify(anchors)}`);
         }
     }
 });
@@ -70,13 +72,66 @@ test('presets survive a save/load round trip unchanged', () => {
     }
 });
 
-test('bindItem anchors shapes and each stroke point, and re-anchors after a move', () => {
+test('bindItem anchors shapes and each stroke point; a moved shape is re-anchored', () => {
     const glasses = createItem('glasses', { x: 150, y: 58 });
-    assert.equal(glasses._bone, 'EYES');
-    glasses.x = 182; glasses.y = 450;
-    assert.equal(bindItem(glasses)._bone, 'L_SHIN');
+    assert.deepEqual(anchorBones(glasses), [['EYES']]);
+    glasses.x = 182; glasses.y = 480;
+    assert.deepEqual(anchorBones(glasses), [['L_SHIN']], 'stale anchor detected without bindItem');
     const arm = createItem('stroke', { points: [{ x: 210, y: 170 }, { x: 245, y: 220 }, { x: 265, y: 280 }] });
-    assert.deepEqual(arm._bones, ['L_UPPER', 'L_UPPER', 'L_FORE']);
+    assert.deepEqual(anchorBones(arm), [['L_UPPER'], ['L_UPPER', 'L_FORE'], ['L_FORE']]);
+    arm.points[0] = { x: 182, y: 480 };
+    assert.deepEqual(anchorBones(bindItem(arm))[0], ['L_SHIN']);
+});
+
+test('points on keypoints get every bone ending there, the one shared with the neighbour first', () => {
+    const [, , , , shoulders, lArm, , , , , , hips] = PRESETS.classic.items; // CONFIG.CONNECTIONS order
+    assert.deepEqual(anchorBones(lArm), [['L_UPPER', 'SHOULDERS', 'L_SIDE'], ['L_UPPER', 'L_FORE']]);
+    assert.deepEqual(anchorBones(shoulders)[0][0], 'SHOULDERS');
+    assert.deepEqual(anchorBones(hips), [['HIPS', 'L_SIDE', 'L_THIGH'], ['HIPS', 'R_SIDE', 'R_THIGH']]);
+    const noseEye = PRESETS.classic.items[0];
+    assert.deepEqual(anchorBones(noseEye), [['NOSE_L', 'NOSE_R'], ['NOSE_L', 'EYES', 'EAR_L']]);
+});
+
+// Tiny seeded PRNG so the visibility patterns are reproducible.
+function rng(seed) {
+    return () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+}
+const key = (p) => `${p.x.toFixed(4)},${p.y.toFixed(4)}`;
+
+test('Classic draws every connection whose keypoints are confident, whatever else is hidden', () => {
+    const random = rng(7);
+    const { MIN_CONFIDENCE } = CONFIG.TRACKING;
+    const rig = new Rig();
+    for (let trial = 0; trial < 300; trial++) {
+        const live = CONFIG.MODEL_POSE.map(p => ({ x: p.x * 1.3 + 40, y: p.y * 1.3 - 20, score: random() < 0.6 ? 0.9 : 0.1 }));
+        rig.update(live);
+        const ctx = fakeCtx();
+        drawLook(ctx, PRESETS.classic, rig.matrixFor, '#00FFFF', STYLE);
+
+        const segments = new Set();
+        let cur = null;
+        const arcs = new Map();
+        for (const o of ctx.ops) {
+            if (o.op === 'moveTo') cur = o;
+            if (o.op === 'lineTo') {
+                segments.add([key(cur), key(o)].sort().join('|'));
+                cur = o;
+            }
+            if (o.op === 'arc') arcs.set(key(o), (arcs.get(key(o)) ?? 0) + 1);
+        }
+        const ok = (k) => live[k].score > MIN_CONFIDENCE;
+        const expected = new Set(CONFIG.CONNECTIONS.filter(([i, j]) => ok(i) && ok(j))
+            .map(([i, j]) => [key(live[i]), key(live[j])].sort().join('|')));
+        assert.deepEqual(segments, expected, `trial ${trial}`);
+
+        // A joint dot needs its keypoint and at least one neighbour along a bone (no bone, no anchor).
+        const neighbours = (k) => Object.values(BONES).filter(b => b.includes(k)).map(b => b[0] + b[1] - k);
+        CONFIG.MODEL_POSE.forEach((_, k) => {
+            const dot = ok(k) && neighbours(k).some(ok);
+            const ring = k === CONFIG.KP.NOSE && ok(k) && (ok(CONFIG.KP.L_EYE) || ok(CONFIG.KP.R_EYE));
+            assert.equal(arcs.get(key(live[k])) ?? 0, Number(dot) + Number(ring), `trial ${trial}, keypoint ${k}`);
+        });
+    }
 });
 
 test('copyLook gives an independent copy; editing it leaves the preset unchanged', () => {
@@ -113,8 +168,9 @@ test('items on an unusable bone are skipped; strokes break where a point is unus
     const arcs = ctx.ops.filter(o => o.op === 'arc');
     assert.equal(arcs.length, 1);
     assert.equal(arcs[0].y, 205);
-    const lines = ctx.ops.filter(o => o.op === 'moveTo' || o.op === 'lineTo').slice(-2);
-    assert.deepEqual(lines.map(o => [o.op, o.x, o.y]), [['moveTo', 265, 280], ['lineTo', 275, 300]]);
+    // The first point (L_UPPER only) is skipped; the elbow point falls back from L_UPPER to L_FORE.
+    const lines = ctx.ops.filter(o => o.op === 'moveTo' || o.op === 'lineTo').slice(-3);
+    assert.deepEqual(lines.map(o => [o.op, o.x, o.y]), [['moveTo', 245, 220], ['lineTo', 265, 280], ['lineTo', 275, 300]]);
 });
 
 test('a shape is placed by bone matrix, then position, rotation and scale', () => {

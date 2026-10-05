@@ -11,8 +11,16 @@
 //   BASE_RADIUS                      ~half the base size of a shape at scale 1 (model units), for hit-testing
 //   tracePath(ctx, item)             adds the item's subpaths in item space: shapes centred on (0, 0) at base size,
 //                                    a stroke as its raw model-space polyline. No beginPath, no stroke.
-//   bindItem(item) -> item           caches anchors: item._bone (shapes) or item._bones[i] (stroke points). Call after
-//                                    every move/edit; drawing also binds lazily when the cache is missing or stale.
+//   Anchors: each anchor point (a shape's centre, or each stroke point) has an ordered list of candidate bone names
+//   (rig.anchorCandidates); it is drawn through the first one whose matrix is usable. Points on a keypoint have
+//   several candidates (every bone ending there maps the point exactly); stroke points prefer a bone shared with a
+//   neighbouring point, so e.g. a shoulder->elbow line uses L_UPPER at both ends.
+//   bindItem(item) -> item           computes and caches the anchors (in '_' fields). Call after every edit of a
+//                                    stroke's points. Drawing rebinds by itself when the cache is missing, when a
+//                                    shape's x/y changed, or when a stroke's point count changed, but not when stroke
+//                                    points were moved in place.
+//   anchorBones(item) -> [[bone]]    the candidate lists, one per anchor point (shapes: one list; strokes: one per
+//                                    point), binding first if needed. Read-only; use this instead of the caches.
 //   bindLook(look) -> look
 //   traceItem(ctx, item, matrixFor) -> bool
 //                                    adds the item's path mapped through its bone(s); false if nothing was added
@@ -34,7 +42,7 @@
 //   PRESETS                          { classic, glowSticks, party, elSuit }; PRESETS.classic is the default look.
 //                                    Treat as read-only (only the anchor caches get written); copyLook before editing.
 import { CONFIG } from '../config.js';
-import { BONES, MODEL_POINTS, nearestBone } from '../logic/rig.js';
+import { BONES, MODEL_POINTS, anchorCandidates } from '../logic/rig.js';
 
 const TAU = 2 * Math.PI;
 
@@ -97,11 +105,36 @@ export function tracePath(ctx, item) {
 
 export function bindItem(item) {
     if (item.type === 'stroke') {
-        item._bones = item.points.map(nearestBone);
+        const raw = item.points.map(anchorCandidates);
+        item._anchors = raw.map((cands, i) => {
+            if (cands.length < 2) return cands;
+            const near = new Set([...(raw[i - 1] ?? []), ...(raw[i + 1] ?? [])]);
+            return [...cands.filter(b => near.has(b)), ...cands.filter(b => !near.has(b))];
+        });
     } else {
-        item._bone = nearestBone(item);
+        item._anchor = { x: item.x, y: item.y, bones: anchorCandidates(item) };
     }
     return item;
+}
+
+function ensureBound(item) {
+    const stale = item.type === 'stroke'
+        ? !item._anchors || item._anchors.length !== item.points.length
+        : !item._anchor || item._anchor.x !== item.x || item._anchor.y !== item.y;
+    if (stale) bindItem(item);
+}
+
+export function anchorBones(item) {
+    ensureBound(item);
+    return item.type === 'stroke' ? item._anchors : [item._anchor.bones];
+}
+
+function firstMatrix(bones, matrixFor) {
+    for (let i = 0; i < bones.length; i++) {
+        const m = matrixFor(bones[i]);
+        if (m) return m;
+    }
+    return null;
 }
 
 export function bindLook(look) {
@@ -113,8 +146,8 @@ export function traceItem(ctx, item, matrixFor) {
     if (item.type === 'stroke') return traceStroke(ctx, item, matrixFor);
     const trace = SHAPES[item.type];
     if (!trace) return false;
-    if (item._bone === undefined) bindItem(item);
-    const m = matrixFor(item._bone);
+    ensureBound(item);
+    const m = firstMatrix(item._anchor.bones, matrixFor);
     if (!m) return false;
     ctx.save();
     ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
@@ -126,14 +159,14 @@ export function traceItem(ctx, item, matrixFor) {
     return true;
 }
 
-// Each point goes through its own bone's matrix, so the stroke bends at joints. A point whose bone isn't usable
+// Each point goes through its own anchor's matrix, so the stroke bends at joints. A point whose bone isn't usable
 // breaks the polyline into separate subpaths.
 function traceStroke(ctx, item, matrixFor) {
     const pts = item.points;
-    if (!item._bones || item._bones.length !== pts.length) bindItem(item);
+    ensureBound(item);
     let pen = false, traced = false;
     for (let i = 0; i < pts.length; i++) {
-        const m = matrixFor(item._bones[i]);
+        const m = firstMatrix(item._anchors[i], matrixFor);
         if (!m) {
             pen = false;
             continue;
@@ -257,7 +290,9 @@ const boneStroke = (bone, t0, t1, offset = 0, color = null) =>
     createItem('stroke', { color, points: [onBone(bone, t0, offset), onBone(bone, t1, offset)] });
 const at = (k) => ({ x: P[k].x, y: P[k].y });
 const eyeDistance = Math.hypot(P[KP.L_EYE].x - P[KP.R_EYE].x, P[KP.L_EYE].y - P[KP.R_EYE].y);
-// Old renderer's face ring: centred on the nose, radius = eye distance.
+// Old renderer's face ring: centred on the nose, radius = eye distance on the model. It anchors to the nose bones
+// (NOSE_L, then NOSE_R) so it sits exactly on the nose and stays when one eye is hidden; live, its size follows the
+// nose-eye distance rather than the eye distance.
 const headRing = (color = null) => createItem('circle', { ...at(KP.NOSE), scale: eyeDistance / 20, color });
 
 const STICK_BONES = ['SHOULDERS', 'L_UPPER', 'L_FORE', 'R_UPPER', 'R_FORE', 'L_SIDE', 'R_SIDE', 'HIPS',
@@ -281,7 +316,7 @@ const glowSticks = {
     name: 'Glow Sticks',
     items: [
         ...STICK_BONES.map((bone, i) => boneStroke(bone, 0.08, 0.92, 0, GLOW_STICK_COLORS[i])),
-        headRing(GLOW_STICK_COLORS[1])
+        headRing('#FFFFFF')
     ]
 };
 

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { CONFIG } from '../js/config.js';
 import { load, save } from '../js/services/storage.js';
-import { PRESETS, copyLook } from '../js/ui/looks.js';
+import { PRESETS, anchorBones, copyLook } from '../js/ui/looks.js';
 
 const KEY = CONFIG.LOOKS.STORAGE_KEY;
 const N = CONFIG.LOOKS.MAX_PERSONS;
@@ -31,13 +31,13 @@ test('save then load restores the looks, without anchor caches', () => {
     persons[0] = copyLook(PRESETS.party);
     persons[3] = { name: 'Empty', items: [] };
     assert.equal(save(persons, storage), true);
-    assert.ok(!storage.data.get(KEY).includes('"_bone'), 'caches are not saved');
+    assert.ok(!storage.data.get(KEY).includes('"_anchor'), 'caches are not saved');
     const loaded = load(storage);
     assert.equal(loaded.length, N);
     assert.deepEqual(loaded[0], copyLook(PRESETS.party));
     assert.deepEqual(loaded[3], { name: 'Empty', items: [] });
     assert.equal(loaded[1], null);
-    assert.equal(loaded[0].items[0]._bone, 'EYES', 'anchors are rebuilt on load');
+    assert.deepEqual(anchorBones(loaded[0].items[0]), [['EYES']], 'anchors are rebuilt on load');
 });
 
 test('throwing storage: load falls back to defaults, save reports failure', () => {

@@ -38,9 +38,17 @@ R_THIGH   [R_HIP, R_KNEE]        R_SHIN    [R_KNEE, R_ANKLE]
 
 Items store bones by **name** (not array index) so the list can grow without breaking saved looks.
 
+Face bones `NOSE_L [NOSE, L_EYE]`, `NOSE_R [NOSE, R_EYE]`, `EAR_L [L_EYE, L_EAR]`, `EAR_R [R_EYE, R_EAR]` exist only for
+points that sit on a keypoint (below); `nearestBone` never picks them, because they are short and jittery.
+
 **Anchoring rule:** a point anchors to the bone with the smallest point-to-segment distance (the projection is
-clamped to the segment) in model space. Head items (glasses, hat, head ring) land on `EYES`. A chest circle
-lands on `SPINE`.
+clamped to the segment) in model space. Head items (glasses, hat) land on `EYES`. A chest circle lands on `SPINE`.
+A point within `LOOKS.JOINT_SNAP` of a keypoint instead gets an ordered list of candidates: every bone ending at that
+keypoint, since each maps it exactly. Drawing uses the first usable candidate, so a joint stays drawn while any of
+its bones is visible. For stroke points, the candidates shared with a neighbouring point come first (a
+shoulder→elbow line uses `L_UPPER` at both ends, the hip line uses `HIPS`). Classic relies on this: every connection
+whose two keypoints are confident is drawn, like the old renderer. The head ring sits on the nose and anchors to
+`NOSE_L`/`NOSE_R`. Other points have a single candidate.
 
 ## 3. Model → live transform
 
@@ -65,8 +73,15 @@ an arm outline ends up inside the arm. Compute the body's handedness as the sign
 `cross(L_SHOULDER − R_SHOULDER, PELVIS − NECK)` for both the model and the live pose. If the signs differ, mirror
 each item across its bone axis in model space before applying `k` (equivalent: use `conj` on the offset relative
 to the bone line). If the torso isn't visible, use the head instead: the sign of `cross(L_EYE − R_EYE, NOSE − R_EYE)`
-(otherwise close-up selfies on the mirrored front camera would get head items upside down). If neither is visible,
-assume no reflection.
+(otherwise close-up selfies on the mirrored front camera would get head items upside down). The cross product is normalised by
+`|below − R|²`, which measures how frontal the body is (≈ 0.5 for the model torso, 1 for the model head). Below
+`LOOKS.MIN_FACING` (side-on), or when nothing is visible, the person keeps their previous reflection (hysteresis; 55
+flips per 100 frames otherwise). Before the first confident decision the renderer's prior applies: a mirrored canvas
+(front camera) means a front-facing person is reflected.
+
+**Short bones:** a bone whose scale (live length / model length) is below `LOOKS.MIN_BONE_SCALE_RATIO` × the person's
+largest body-bone scale is unusable for that frame. This covers side-on eyes and limbs pointing at the camera, where
+the bone's angle is mostly noise and a hat would spin.
 
 The mirrored case is still one affine matrix per bone: with `w = d / conj(d0)`, `p' = A + w·conj(p − A0)`, i.e.
 `(a, b, c, d) = (wr, wi, wi, −wr)`, where `wr = (d.x·d0.x − d.y·d0.y) / n` and `wi = (d.x·d0.y + d.y·d0.x) / n`.

@@ -70,7 +70,11 @@ export const CONFIG = {
     LOOKS: {
         MODEL_WIDTH: 300,
         MODEL_HEIGHT: 600,
-        STORAGE_KEY: 'neonDance.looks.v1'
+        STORAGE_KEY: 'neonDance.looks.v1',
+        JOINT_SNAP: 0.5,           // model units: a point this close to a keypoint anchors to every bone ending there
+        MIN_FACING: 0.15,          // |normalised handedness cross| below this (side-on) keeps the previous reflection
+        MIN_BONE_SCALE_RATIO: 0.2  // a bone shorter than this x the person's largest bone scale is unusable (side-on
+                                   // eyes, a limb pointing at the camera): its items are skipped instead of spinning
         // MAX_PERSONS is set below from TRACKING.MAX_INSTANCES (one look slot per tracked person).
         // Item line width isn't a constant here: items are stroked with the render pass's width (RENDER.LINE_WIDTH /
         // RENDER.GLOW_LINE_WIDTH) so the glow halo keeps working.
