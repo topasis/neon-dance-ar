@@ -59,7 +59,11 @@ export class RecorderService {
         this.isRecording = false;
         const stopped = this.stopped;
         this.stopped = null;
-        return stopped;
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => reject(new Error("Recording did not finish in time.")),
+                CONFIG.LIFECYCLE.RECORDER_STOP_TIMEOUT_MS);
+            stopped.then(resolve, reject).finally(() => clearTimeout(timer));
+        });
     }
 
     // On touch devices, opens the share sheet (iOS: "Save Video" to Photos, or straight to TikTok); desktop share

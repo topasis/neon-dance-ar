@@ -9,6 +9,7 @@ export class PoseDetector {
         this.detector = null;
         this.consecutiveFailures = 0; // estimatePoses() errors since the last success
         this.resetsSinceSuccess = 0;
+        this.needsReload = false;     // a reset failed: reload() before the next use
         this.contextLost = false;     // the WebGL backend's GPU context was lost (common on mobile)
     }
 
@@ -27,24 +28,45 @@ export class PoseDetector {
                 modelType: poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING,
                 modelUrl: 'models/movenet-multipose-lightning/model.json',
                 multiPoseMaxDimension: CONFIG.MODEL.MAX_DIMENSION,
+                // The library's default (0.25) would drop poses before our own MIN_INSTANCE_SCORE filter sees them.
+                minPoseScore: CONFIG.TRACKING.MIN_INSTANCE_SCORE,
                 // Both default to true for MultiPose; InstanceTracker and its One Euro filters do this instead.
                 enableSmoothing: false,
                 enableTracking: false
             }
         );
         // A lost context makes every later estimate fail (or silently return nothing): fail fast so reset() runs.
+        // WebGPU device loss (opt-in backend) isn't detected; only the consecutive-failure reset covers it.
         this.contextLost = false;
         const canvas = tf.getBackend() === 'webgl' ? tf.backend().canvas : null;
         if (canvas) canvas.addEventListener('webglcontextlost', () => { this.contextLost = true; }, { once: true });
     }
 
-    // Disposes the detector and re-creates the TF.js backend and model; a lost GPU context can't be reused.
-    // Rejects if that fails, or if the previous reset wasn't followed by a successful estimate.
+    // Runtime recovery: re-creates the backend and model (see recreate()). Rejects if that fails, or if the
+    // previous reset wasn't followed by a successful estimate; either way needsReload is then set.
     async reset() {
         if (this.resetsSinceSuccess >= MAX_RESETS_WITHOUT_SUCCESS) {
+            this.needsReload = true;
             throw new Error("Pose detection still failing after a reset");
         }
         this.resetsSinceSuccess++;
+        try {
+            await this.recreate();
+        } catch (err) {
+            this.needsReload = true;
+            throw err;
+        }
+    }
+
+    // Retry after a failed reset (on the next camera start): re-creates the backend and model unconditionally.
+    async reload() {
+        this.resetsSinceSuccess = 0;
+        await this.recreate();
+        this.needsReload = false;
+    }
+
+    // Disposes the detector and re-creates the TF.js backend and model; a lost GPU context can't be reused.
+    async recreate() {
         this.consecutiveFailures = 0;
 
         const detector = this.detector;

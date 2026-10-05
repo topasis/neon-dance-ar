@@ -25,7 +25,9 @@ export const CONFIG = {
         RENDER_GRACE_MS: 150     // ...but is only drawn for this long; hides a missed estimate without frozen ghosts
     },
     LIFECYCLE: {
-        METADATA_TIMEOUT_MS: 5000 // camera start fails if the video has no metadata by then
+        METADATA_TIMEOUT_MS: 5000,      // camera start fails if the video has no metadata by then
+        UNMUTE_TIMEOUT_MS: 3000,        // on return from the background, a still-muted camera track counts as dead after this
+        RECORDER_STOP_TIMEOUT_MS: 5000  // a recording whose MediaRecorder never fires 'stop' fails after this
     },
     NEON_COLORS: [
         '#00FFFF', '#FF00FF', '#00FF00', '#FFA500', 

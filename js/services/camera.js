@@ -55,6 +55,19 @@ export class CameraService {
         }
     }
 
+    // After the page returns from the background: replays a paused video (iOS pauses it) and waits up to
+    // timeoutMs for a muted track to unmute. Resolves whether the camera is delivering video again.
+    async resume(timeoutMs) {
+        const stream = this.video.srcObject;
+        const track = stream && stream.getVideoTracks()[0];
+        if (!track || track.readyState !== 'live') return false;
+        if (track.muted) await waitForEvent(track, 'unmute', timeoutMs);
+        if (this.video.paused) {
+            await this.video.play().catch(err => console.warn("Camera video did not resume:", err));
+        }
+        return this.video.srcObject === stream && track.readyState === 'live' && !track.muted && !this.video.paused;
+    }
+
     // True while the camera stream still has a live video track.
     isLive() {
         const stream = this.video.srcObject;
@@ -64,6 +77,19 @@ export class CameraService {
 
 function stopTracks(stream) {
     stream.getTracks().forEach(track => track.stop());
+}
+
+// Resolves when `type` fires on target, or after timeoutMs.
+function waitForEvent(target, type, timeoutMs) {
+    return new Promise(resolve => {
+        const done = () => {
+            clearTimeout(timer);
+            target.removeEventListener(type, done);
+            resolve();
+        };
+        const timer = setTimeout(done, timeoutMs);
+        target.addEventListener(type, done);
+    });
 }
 
 function waitForMetadata(video, timeoutMs) {
