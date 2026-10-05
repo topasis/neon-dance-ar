@@ -1,5 +1,7 @@
 import { CONFIG } from '../config.js';
 import { CoordinateMapping } from '../logic/coords.js';
+import { Rig } from '../logic/rig.js';
+import { drawLook, PRESETS } from './looks.js';
 
 export class Renderer {
     constructor(canvasElement) {
@@ -9,18 +11,31 @@ export class Renderer {
         this.mapping = new CoordinateMapping();
         // Only the user-facing camera exists for now; Phase 2's camera switch updates this.
         this.facingMode = 'user';
-        // Extension points (Phase 3 assets, decorations). Both receive canvas-mapped coordinates and the ctx to draw on.
-        // keypoint index -> drawFn(ctx, keypoint, instance, color, points); drawn instead of that joint's circle.
+        // Per-person looks by slot (Look or null = PRESETS.classic); the engine passes its array via setLooks().
+        this.persons = new Array(CONFIG.LOOKS.MAX_PERSONS).fill(null);
+        // Per-frame data of each person drawn, pooled: { inst, color, look, points, rig }.
+        this.people = [];
+        this.peopleCount = 0;
+        // inst.id -> { rig, inst, frame }: one Rig per tracked instance, kept across frames (its reflection state needs
+        // consecutive frames of the same person) and dropped at the next frame that doesn't draw the instance.
+        this.rigs = new Map();
+        this.frameNo = 0;
+        // Extension point for Phase 3 image assets, until an `image` item type replaces it.
+        // keypoint index -> drawFn(ctx, keypoint, instance, color, points); drawn crisp-only on top of the look.
         this.landmarkOverrides = new Map();
-        // drawFn(ctx, instance, color, points), called once per instance after bones and joints, in both passes.
-        this.decorators = [];
 
         // Offscreen glow layer at CONFIG.RENDER.GLOW_SCALE of the output size; sized in resize().
         this.glowCanvas = document.createElement('canvas');
         this.glowCtx = this.glowCanvas.getContext('2d');
-        this.glowStyle = { glow: true, lineWidth: CONFIG.RENDER.GLOW_LINE_WIDTH, jointRadius: CONFIG.RENDER.GLOW_LINE_WIDTH / 2 };
-        this.crispStyle = { glow: false, lineWidth: CONFIG.RENDER.LINE_WIDTH, jointRadius: CONFIG.RENDER.JOINT_RADIUS };
+        this.glowStyle = { glow: true, lineWidth: CONFIG.RENDER.GLOW_LINE_WIDTH };
+        this.crispStyle = { glow: false, lineWidth: CONFIG.RENDER.LINE_WIDTH };
         this.resizeGlow();
+    }
+
+    // persons: array of CONFIG.LOOKS.MAX_PERSONS entries (Look or null), read every frame; the editor replaces
+    // entries in place, so changes show up live without calling this again.
+    setLooks(persons) {
+        this.persons = persons;
     }
 
     // drawFn runs with ctx translated to the keypoint's canvas position, so it draws around (0, 0). keypoint is
@@ -32,12 +47,6 @@ export class Renderer {
 
     clearLandmarkOverride(index) {
         this.landmarkOverrides.delete(index);
-    }
-
-    // Decorators draw in canvas pixels with the pass's colour and line width set (thick on the glow layer, thin in the
-    // crisp pass); any ctx state they change is restored after each call.
-    addDecorator(drawFn) {
-        this.decorators.push(drawFn);
     }
 
     resize(width, height) {
@@ -77,15 +86,37 @@ export class Renderer {
         }
     }
 
+    // Draws every instance with its slot's look (the default look, Classic, when the slot has none). Each person's
+    // rig is updated once per frame from the canvas-mapped points and shared by both passes.
     renderSkeletons(trackedInstances) {
-        if (trackedInstances.length === 0) return;
-        const frame = trackedInstances.map(inst => ({
-            inst,
-            color: CONFIG.NEON_COLORS[inst.colorIndex],
-            points: inst.keypoints.map(kp => this.mapping.mapPoint(kp.x, kp.y))
-        }));
-        this.renderGlowPass(ctx => this.drawSkeletons(ctx, frame, this.glowStyle));
-        this.renderCrispPass(ctx => this.drawSkeletons(ctx, frame, this.crispStyle));
+        const n = trackedInstances.length;
+        const frameNo = ++this.frameNo;
+        for (let i = 0; i < n; i++) {
+            const inst = trackedInstances[i];
+            let entry = this.rigs.get(inst.id);
+            // A different object under a known id: the tracker was reset (ids restart), so it's a new person.
+            if (!entry) {
+                this.rigs.set(inst.id, entry = { rig: new Rig(), inst, frame: 0 });
+            } else if (entry.inst !== inst) {
+                entry.inst = inst;
+                entry.rig.reset();
+            }
+            entry.frame = frameNo;
+            const person = this.people[i] ??= { inst: null, color: null, look: null, points: null, rig: null };
+            person.inst = inst;
+            person.color = CONFIG.NEON_COLORS[inst.colorIndex];
+            person.look = this.persons[inst.slot] ?? PRESETS.classic;
+            person.points = inst.keypoints.map(kp => this.mapping.mapPoint(kp.x, kp.y));
+            // Until the person's facing is known, a mirrored canvas means a reflected (front-facing) body.
+            person.rig = entry.rig.update(person.points, inst.keypoints, this.mapping.mirrored);
+        }
+        if (this.rigs.size > n) {
+            for (const [id, entry] of this.rigs) if (entry.frame !== frameNo) this.rigs.delete(id);
+        }
+        this.peopleCount = n;
+        if (n === 0) return;
+        this.renderGlowPass(ctx => this.drawPeople(ctx, this.glowStyle));
+        this.renderCrispPass(ctx => this.drawPeople(ctx, this.crispStyle));
     }
 
     // Glow: drawFn(ctx) draws in canvas pixels onto the small offscreen canvas (a scale transform shrinks it,
@@ -127,77 +158,34 @@ export class Renderer {
         }
     }
 
-    // Bones, joints (or landmark overrides, crisp pass only) and decorators of every instance, onto ctx.
-    drawSkeletons(ctx, frame, style) {
-        for (const { inst, color, points } of frame) {
-            ctx.strokeStyle = color;
-            ctx.fillStyle = color;
-            ctx.lineWidth = style.lineWidth;
-
-            for (const [i, j] of CONFIG.CONNECTIONS) {
-                const kp1 = inst.keypoints[i];
-                const kp2 = inst.keypoints[j];
-                if (kp1.score > CONFIG.TRACKING.MIN_CONFIDENCE && kp2.score > CONFIG.TRACKING.MIN_CONFIDENCE) {
-                    ctx.beginPath();
-                    ctx.moveTo(points[i].x, points[i].y);
-                    ctx.lineTo(points[j].x, points[j].y);
-                    ctx.stroke();
-                }
-            }
-
-            inst.keypoints.forEach((kp, k) => {
-                if (kp.score > CONFIG.TRACKING.MIN_CONFIDENCE) {
-                    const override = this.landmarkOverrides.get(k);
-                    if (override) {
-                        // Assets are drawn crisp only; the glow pass leaves no blurred dot under them.
-                        if (style.glow) return;
-                        ctx.save();
-                        try {
-                            ctx.translate(points[k].x, points[k].y);
-                            override(ctx, { x: points[k].x, y: points[k].y, score: kp.score }, inst, color, points);
-                        } finally {
-                            ctx.restore();
-                        }
-                    } else {
-                        ctx.beginPath();
-                        ctx.arc(points[k].x, points[k].y, style.jointRadius, 0, 2 * Math.PI);
-                        ctx.fill();
-                    }
-                }
-            });
-
-            for (const decorate of this.decorators) {
-                ctx.save();
-                try {
-                    decorate(ctx, inst, color, points);
-                } finally {
-                    ctx.restore();
-                }
-            }
+    // Each person's look onto ctx with the pass's style, then (crisp pass only) any landmark overrides on top.
+    drawPeople(ctx, style) {
+        for (let i = 0; i < this.peopleCount; i++) {
+            const { inst, color, look, points, rig } = this.people[i];
+            drawLook(ctx, look, rig.matrixFor, color, style);
+            // Assets are drawn crisp only, so the glow pass leaves no blurred halo under them.
+            if (!style.glow && this.landmarkOverrides.size > 0) this.drawOverrides(ctx, inst, color, points, style);
         }
+    }
+
+    drawOverrides(ctx, inst, color, points, style) {
+        inst.keypoints.forEach((kp, k) => {
+            const override = this.landmarkOverrides.get(k);
+            if (!override || kp.score <= CONFIG.TRACKING.MIN_CONFIDENCE) return;
+            ctx.save();
+            try {
+                ctx.strokeStyle = color;
+                ctx.fillStyle = color;
+                ctx.lineWidth = style.lineWidth;
+                ctx.translate(points[k].x, points[k].y);
+                override(ctx, { x: points[k].x, y: points[k].y, score: kp.score }, inst, color, points);
+            } finally {
+                ctx.restore();
+            }
+        });
     }
 
     clear() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    }
-}
-
-// Decorator: a circle around the face, centred on the nose with the eye distance as radius.
-// instance.keypoints carry the scores; points are the same keypoints mapped to canvas coordinates.
-export function drawFaceCircle(ctx, instance, color, points) {
-    const [nose, leftEye, rightEye] = instance.keypoints;
-
-    if (nose && leftEye && rightEye &&
-        nose.score > CONFIG.TRACKING.MIN_CONFIDENCE &&
-        leftEye.score > CONFIG.TRACKING.MIN_CONFIDENCE &&
-        rightEye.score > CONFIG.TRACKING.MIN_CONFIDENCE) {
-
-        const dx = points[1].x - points[2].x;
-        const dy = points[1].y - points[2].y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-
-        ctx.beginPath();
-        ctx.arc(points[0].x, points[0].y, distance, 0, 2 * Math.PI);
-        ctx.stroke();
     }
 }

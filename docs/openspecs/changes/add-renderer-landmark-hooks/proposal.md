@@ -1,5 +1,9 @@
 # Change: Add per-landmark override hooks to the renderer
 
+> **Superseded in part by `add-look-editor` (11):** decorators (`addDecorator`, `drawFaceCircle`) were removed. The
+> face circle is now an item of the Classic look, and each person is drawn with a look. Landmark overrides remain,
+> drawn crisp-only on top of the look, until an `image` item type replaces them.
+
 ## Why
 - R1: `CLAUDE.md` (Phase 3 → Rendering Integration) requires the Phase 1 renderer to expose a per-landmark override
   hook so Phase 3 can draw assets with `ctx.translate` / `ctx.rotate` without touching inference. It doesn't exist.

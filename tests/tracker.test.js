@@ -205,3 +205,35 @@ test('reset forgets instances and filter state', () => {
     assert.deepEqual([inst.id, inst.colorIndex], [0, 0]);
     assert.equal(inst.filters[0].x.tPrev, DT / 1000, 'fresh filter');
 });
+
+test('new people get the lowest free slot 0-4 and keep it while tracked', () => {
+    const tracker = new InstanceTracker();
+    const people = [pose(100, 240), pose(500, 240), pose(900, 240)];
+    let out = tracker.update(people, 0);
+    assert.deepEqual(out.map(i => i.slot), [0, 1, 2]);
+    // The first person leaves; the others keep their slots, estimate after estimate.
+    for (let s = 1; s <= 5; s++) {
+        out = tracker.update([people[1], people[2]], s * DT);
+        assert.deepEqual(out.filter(i => i.lastSeen === s * DT).map(i => [i.id, i.slot]), [[1, 1], [2, 2]]);
+    }
+    // While the first person is in the grace period slot 0 stays reserved; after it, slot 0 is free again.
+    out = tracker.update([people[1], people[2], pose(1300, 240)], 6 * DT);
+    assert.equal(out.find(i => i.bbox.cx === 1300).slot, 3);
+    out = tracker.update([people[1], people[2], pose(1300, 240), pose(1700, 240)], GRACE_PERIOD_MS + 1);
+    assert.equal(out.find(i => i.bbox.cx === 1700).slot, 0);
+    assert.deepEqual(out.map(i => i.slot).sort(), [0, 1, 2, 3]);
+});
+
+test('with all five slots held, a new person takes the slot of someone who left (unique on screen)', () => {
+    const tracker = new InstanceTracker();
+    const people = [0, 1, 2, 3, 4].map(i => pose(100 + 250 * i, 240));
+    tracker.update(people, 0); // slots 0-4
+    // The person in slot 2 leaves; past the render grace (still within the grace period) a new person appears.
+    const others = people.filter((_, i) => i !== 2);
+    tracker.update(others, DT);
+    const out = tracker.update([...others, pose(600, 2000)], DT + RENDER_GRACE_MS + 1);
+    assert.equal(tracker.instances.length, 6, 'the leaver is still tracked (grace period)');
+    assert.equal(out.length, 5);
+    assert.equal(out.find(i => i.bbox.cy === 2000).slot, 2);
+    assert.deepEqual(out.map(i => i.slot).sort(), [0, 1, 2, 3, 4]);
+});

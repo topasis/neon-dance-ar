@@ -53,6 +53,8 @@ export class InstanceTracker {
             const inst = {
                 id: this.nextId++,
                 colorIndex: this.lowestFreeIndex('colorIndex', CONFIG.NEON_COLORS.length, timestampMs),
+                // Look slot (Person N = slot N-1), kept while tracked.
+                slot: this.lowestFreeIndex('slot', CONFIG.TRACKING.MAX_INSTANCES, timestampMs),
                 filters: p.pose.keypoints.map(() => ({ x: new OneEuroFilter(), y: new OneEuroFilter() })),
                 keypoints: null
             };
@@ -79,9 +81,9 @@ export class InstanceTracker {
         inst.lastSeen = timestampMs;
     }
 
-    // Lowest index in [0, count) that no tracked instance uses for `key`. If all are taken (only possible with more
-    // tracked instances than palette entries, i.e. several out-of-view instances in their grace period), the lowest
-    // index unused by the visible ones; colours of people on screen stay unique.
+    // Lowest index in [0, count) that no tracked instance uses for `key` (colorIndex or slot). If all are taken (more
+    // tracked instances than indices, i.e. out-of-view instances in their grace period), the lowest index unused by
+    // the visible ones, so colours and slots of people on screen stay unique.
     lowestFreeIndex(key, count, timestampMs) {
         const free = (insts) => {
             const used = new Set(insts.map(inst => inst[key]));

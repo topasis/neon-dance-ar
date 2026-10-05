@@ -1,17 +1,20 @@
 import { CONFIG } from '../config.js';
 import { DOMManager } from '../ui/dom.js';
-import { Renderer, drawFaceCircle } from '../ui/renderer.js';
+import { Renderer } from '../ui/renderer.js';
 import { PoseDetector } from '../services/ml.js';
 import { CameraService } from '../services/camera.js';
 import { AudioService } from '../services/audio.js';
 import { RecorderService } from '../services/recorder.js';
 import { InstanceTracker } from '../logic/tracker.js';
+import { load } from '../services/storage.js';
 
 export class AppEngine {
     constructor() {
         this.dom = new DOMManager();
         this.renderer = new Renderer(this.dom.canvas);
-        this.renderer.addDecorator(drawFaceCircle);
+        // Per-person looks by slot (null = default look). The editor replaces entries in place and saves them.
+        this.persons = load();
+        this.renderer.setLooks(this.persons);
         this.detector = new PoseDetector();
         this.camera = new CameraService(this.dom.video, CONFIG.CAMERA.WIDTH, CONFIG.CAMERA.HEIGHT);
         this.audio = new AudioService(this.dom.audioEl);

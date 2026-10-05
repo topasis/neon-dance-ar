@@ -10,7 +10,7 @@ over the live feed or on a pure black background (user's choice).
 Development is split into three phases:
 - **Phase 1 — Web Prototype:** HTML/JS/CSS application. Live webcam input, browser canvas output. 
 - **Phase 2 — PWA & Mobile Web Optimization:** Responsive design, mobile camera handling (front/back), and Progressive Web App (PWA) setup.
-- **Phase 3 — Shape Customization (Premium):** Per-landmark visual asset overlay. Future direction only — do not implement during Phase 1 or Phase 2.
+- **Phase 3 — Shape Customization (Premium):** Premium image assets (SVG/PNG) for looks. Future direction only — do not implement during Phase 1 or Phase 2. (Geometric shapes and freehand strokes are already in Phase 1, see Step 6b.)
 
 ---
 
@@ -22,6 +22,7 @@ Development is split into three phases:
 4. **Music Playback:** The app plays a selected music track while the user dances. This music is mixed into the recorded video.
 5. **Recording:** A start/stop button saves the composited output (including the current background mode and the music audio track) as a video file (WebM/MP4) for easy user sharing.
 6. **Live Preview:** The composited frame is displayed in real time on an HTML5 `<canvas>` at 30 FPS minimum.
+7. **Customizable Looks:** Each of up to 5 people (Person 1–5) can get a look made of geometric shapes and freehand strokes anchored to the body, built in a body editor or loaded from presets. People without a custom look use the default skeleton + face ring in their neon color.
 
 ---
 
@@ -173,6 +174,16 @@ For the glow effect:
 - Draw the bones (lines) and joints (circles). Skip keypoints with a confidence score `< 0.3`.
 - Reset `globalCompositeOperation = "source-over"` after drawing skeletons.
 
+#### Step 6b — Looks (per-person shapes)
+Each person is drawn with a *look* instead of a fixed skeleton (`docs/openspecs/changes/add-look-editor`):
+- A look is a list of items (`circle`, `rect`, `triangle`, `line`, `glasses`, `hat`, `smile`, freehand `stroke`)
+  placed on a fixed model pose. Each item anchors to its nearest bone; a per-bone similarity transform
+  (`js/logic/rig.js`) maps it onto the live keypoints every frame, with a reflection check for mirrored bodies.
+- The tracker gives each instance a stable `slot` (0–4). The renderer draws `persons[slot] ?? PRESETS.classic`;
+  items without a colour use the instance's neon colour. Classic (bones, joint rings, face ring) is the default look.
+- Looks are drawn as stroked paths through both glow passes (Step 6). Presets: Classic, Glow Sticks, Party, EL Suit.
+- A full-screen body editor sets the look per person; looks are saved in `localStorage`.
+
 #### Step 7 — Background Toggle
 Maintain a boolean flag `showCameraFeed`.
 - If `true`: `ctx.drawImage(videoElement, 0, 0, width, height)` before drawing skeletons.
@@ -219,10 +230,10 @@ Key differences from Phase 1:
 > **Do not implement during Phase 1 or Phase 2.** This section defines the design contract so that the rendering architecture accommodates it in the future.
 
 #### Overview
-Phase 3 introduces a per-landmark shape layer. Instead of the neon stick skeleton, users can assign a visual asset — an SVG vector shape or PNG image — to any individual landmark. Each asset is positioned, scaled, and optionally rotated relative to its assigned landmark in real time.
+Phase 3 adds premium image assets to the Phase 1 look system (Step 6b). Users can place a visual asset — an SVG vector shape or PNG image — on the body like any other look item. It plugs in as an `image` item type: anchored to a bone, then positioned, scaled and rotated with it in real time.
 
 #### Rendering Integration
 - **Asset Types:** SVG or PNG images drawn onto the canvas using `ctx.drawImage()`.
 - **Placement:** The asset is drawn centered on `(screen_x, screen_y)`.
 - **Tilt (Rotation):** When enabled, the asset's rotation angle is derived from a reference landmark pair (e.g. left eye to right eye). The angle is `Math.atan2(dy, dx)` between the two reference points.
-- **Pipeline:** The Phase 1 skeleton renderer must expose a per-landmark override hook so Phase 3 can inject assets (via `ctx.translate` and `ctx.rotate`) without modifying the core TF.js inference loop.
+- **Pipeline:** The Phase 1 renderer exposes a per-landmark override hook (`setLandmarkOverride`, drawn crisp-only on top of the look) so Phase 3 can inject assets (via `ctx.translate` and `ctx.rotate`) without modifying the core TF.js inference loop. It stays until the `image` item type replaces it.

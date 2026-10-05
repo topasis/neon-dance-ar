@@ -19,11 +19,11 @@ See `design.md` for the model pose, the transform math and the data format.
 - [x] 2.3 Anchor caching: `bindItem(item)` sets `_bone` / `_bones` from model coordinates.
 
 ## 3. Live rendering
-- [ ] 3.1 `js/logic/tracker.js`: assign `slot` (lowest free 0–4) to new instances and keep it while tracked.
-- [ ] 3.2 `js/ui/renderer.js`: replace the skeleton and face-circle drawing with `drawLook` per instance, using
+- [x] 3.1 `js/logic/tracker.js`: assign `slot` (lowest free 0–4) to new instances and keep it while tracked.
+- [x] 3.2 `js/ui/renderer.js`: replace the skeleton and face-circle drawing with `drawLook` per instance, using
       `persons[inst.slot] ?? PRESETS.classic` and the instance color for `color: null`. Keep the glow/composite
       setup and reset.
-- [ ] 3.3 Verify: with no saved looks, the live view looks like the current skeleton plus face ring.
+- [x] 3.3 Verify: with no saved looks, the live view looks like the current skeleton plus face ring.
 
 ## 4. Storage
 - [x] 4.1 `js/services/storage.js`: `load()` → `persons[5]`, `save(persons)`, with try/catch and a fallback to all
@@ -38,9 +38,9 @@ See `design.md` for the model pose, the transform math and the data format.
       `persons` array.
 
 ## 6. Docs
-- [ ] 6.1 `CLAUDE.md`: add the look system to Phase 1 scope (Core Features + a new step after Step 6). Narrow
+- [x] 6.1 `CLAUDE.md`: add the look system to Phase 1 scope (Core Features + a new step after Step 6). Narrow
       Phase 3 to premium image assets, and note that they plug in as an `image` item type.
-- [ ] 6.2 `docs/openspecs/changes/add-renderer-landmark-hooks/proposal.md`: note that decorators are superseded by
+- [x] 6.2 `docs/openspecs/changes/add-renderer-landmark-hooks/proposal.md`: note that decorators are superseded by
       looks.
 
 ## 7. Verification (manual, in Chrome desktop, then phone)
